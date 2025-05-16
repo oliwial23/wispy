@@ -1,4 +1,4 @@
-# axum-signal-cli
+# wispy-signal-cli
 
 This project allows anonymous and pseudonymous messaging in Signal groups by acting as a proxy between [Axum](https://github.com/tokio-rs/axum) and the [Signal-CLI JSON-RPC daemon](https://github.com/AsamK/signal-cli). A custom CLI binary is used to interface with the Axum server, enabling anonymous group messaging, polls, reactions, and more—all built on top of cryptographically enforced workflows.
 
@@ -57,7 +57,7 @@ source ~/.zshrc
 ### **Terminal 2: Run the Axum Server**
 
 ```bash
-cd axum-signal-cli/
+cd wispy-signal-cli/
 cargo build --release
 ```
 
@@ -79,7 +79,7 @@ The server listens for incoming client commands and communicates with the Signal
 ### **Terminal 3: Use the Custom CLI to run the Client and Send Anonymous Messages**
 
 ```bash
-cd axum-signal-cli/
+cd wispy-signal-cli/
 ```
 
 Add your CLI binary to your `$PATH`:
