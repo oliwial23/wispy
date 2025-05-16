@@ -1,0 +1,8 @@
+/Users/oliwiakempinski/Documents/GitHub/wispy/wispy-signal-cli/target/debug/deps/libterminal_size-d263217e374ecc39.rmeta: /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/terminal_size-0.4.2/src/lib.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/terminal_size-0.4.2/src/unix.rs
+
+/Users/oliwiakempinski/Documents/GitHub/wispy/wispy-signal-cli/target/debug/deps/libterminal_size-d263217e374ecc39.rlib: /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/terminal_size-0.4.2/src/lib.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/terminal_size-0.4.2/src/unix.rs
+
+/Users/oliwiakempinski/Documents/GitHub/wispy/wispy-signal-cli/target/debug/deps/terminal_size-d263217e374ecc39.d: /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/terminal_size-0.4.2/src/lib.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/terminal_size-0.4.2/src/unix.rs
+
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/terminal_size-0.4.2/src/lib.rs:
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/terminal_size-0.4.2/src/unix.rs:

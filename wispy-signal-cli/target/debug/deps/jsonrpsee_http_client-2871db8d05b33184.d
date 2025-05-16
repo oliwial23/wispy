@@ -1,0 +1,9 @@
+/Users/oliwiakempinski/Documents/GitHub/wispy/wispy-signal-cli/target/debug/deps/libjsonrpsee_http_client-2871db8d05b33184.rmeta: /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonrpsee-http-client-0.24.9/src/lib.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonrpsee-http-client-0.24.9/src/client.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonrpsee-http-client-0.24.9/src/transport.rs
+
+/Users/oliwiakempinski/Documents/GitHub/wispy/wispy-signal-cli/target/debug/deps/libjsonrpsee_http_client-2871db8d05b33184.rlib: /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonrpsee-http-client-0.24.9/src/lib.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonrpsee-http-client-0.24.9/src/client.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonrpsee-http-client-0.24.9/src/transport.rs
+
+/Users/oliwiakempinski/Documents/GitHub/wispy/wispy-signal-cli/target/debug/deps/jsonrpsee_http_client-2871db8d05b33184.d: /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonrpsee-http-client-0.24.9/src/lib.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonrpsee-http-client-0.24.9/src/client.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonrpsee-http-client-0.24.9/src/transport.rs
+
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonrpsee-http-client-0.24.9/src/lib.rs:
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonrpsee-http-client-0.24.9/src/client.rs:
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonrpsee-http-client-0.24.9/src/transport.rs:

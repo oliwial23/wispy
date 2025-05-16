@@ -1,0 +1,10 @@
+/Users/oliwiakempinski/Documents/GitHub/wispy/wispy-signal-cli/target/debug/deps/libavif_serialize-348d470582ba8cde.rmeta: /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/lib.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/boxes.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/constants.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/writer.rs
+
+/Users/oliwiakempinski/Documents/GitHub/wispy/wispy-signal-cli/target/debug/deps/libavif_serialize-348d470582ba8cde.rlib: /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/lib.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/boxes.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/constants.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/writer.rs
+
+/Users/oliwiakempinski/Documents/GitHub/wispy/wispy-signal-cli/target/debug/deps/avif_serialize-348d470582ba8cde.d: /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/lib.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/boxes.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/constants.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/writer.rs
+
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/lib.rs:
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/boxes.rs:
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/constants.rs:
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.3/src/writer.rs:
