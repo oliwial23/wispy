@@ -1,0 +1,46 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# zk-callbacks = { path = "/Users/oliwiakempinski/Documents/GitHub/callbacks" }
+# zk-callbacks = { path = "/Users/rachelthomas/Documents/Anon_Group_Chat/callbacks" }
+zk-callbacks = { path = "../../callbacks" }
+common = { version = "0.1.0", path = "../common" }
+ark-snark = "0.5.1"
+ark-relations = "0.5.1"
+ark-r1cs-std = "0.5.0"
+reqwest = { version = "0.12.12", features = ["blocking", "json"] }
+ark-serialize = "0.5.0"
+clap = { version = "4.5.26", features = ["cargo", "derive", "wrap_help"] }
+axum = "0.7"
+tokio = { version = "1", features = ["rt", "macros", "net", "rt-multi-thread", "full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tower-http = "0.3"
+jsonrpc = "0.18.0"
+jsonrpsee = { version = "0.24", features = [
+    "macros",
+    "async-client",
+    "http-client",
+] }
+anyhow = "1"
+log = "0.4"
+bytes = "1"
+tokio-util = "0.7"
+futures-util = "0.3"
+thiserror = "2"
+url = "2.5"
+ark-groth16 = "0.5.0"
+ark-bn254 = "0.5.0"
+hex = ">=0.4, <0.5"
+ark-std = "0.5"
+rand = { version = "0.8.5"}
+ark-ff = "0.5.0"
+sha2 = "0.10"
+ark-crypto-primitives = "0.5.0"
+tracing-subscriber = "0.2.25"
+tracing = "0.1.41"
+petname = "2.0.2"
+

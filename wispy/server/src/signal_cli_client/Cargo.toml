@@ -1,0 +1,27 @@
+[package]
+name = "signal-cli-client"
+version = "0.0.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["cargo", "derive", "wrap_help"] }
+log = "0.4"
+serde = "1"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros", "net", "rt-multi-thread"] }
+jsonrpsee = { version = "0.24", features = [
+    "macros",
+    "async-client",
+    "http-client",
+] }
+bytes = "1"
+tokio-util = "0.7"
+futures-util = "0.3"
+thiserror = "2"
+
+[lib]
+name = "signal_cli_client"
+path = "src/lib.rs"

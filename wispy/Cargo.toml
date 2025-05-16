@@ -1,0 +1,10 @@
+[workspace]
+
+resolver = "2"
+
+members = [
+    "server",
+    "client",
+    "common",
+    "server/src/signal_cli_client",
+]

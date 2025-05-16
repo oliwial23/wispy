@@ -1,0 +1,54 @@
+[package]
+name = "server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.95"
+ark-serialize = { version = "0.5.0", features = ["ark-serialize-derive"] }
+axum = {version = "0.8.1", features = ["json", "macros"]}
+common = { version = "0.1.0", path = "../common" }
+rand = "0.8.5"
+tokio = { version = "1.43.0", features = ["full"] }
+# regex = { version = "1", features = ["unicode-case","rt", "macros", "net", "rt-multi-thread"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt", "registry"] }
+tracing = "0.1.41"
+clap = { version = "4", features = ["cargo", "derive", "wrap_help"] }
+log = "0.4"
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+serde = "1"
+serde_json = "1"
+jsonrpsee = { version = "0.24", features = [
+    "macros",
+    "async-client",
+    "http-client",
+] }
+bytes = "1"
+tokio-util = "0.7"
+futures-util = "0.3"
+thiserror = "2"
+shell-words = "1.1"
+chrono = "0.4"
+# zk-callbacks = { path = "/Users/oliwiakempinski/Documents/GitHub/callbacks" }
+# zk-callbacks = { path = "/Users/rachelthomas/Documents/Anon_Group_Chat/callbacks" }
+zk-callbacks = { path = "../../callbacks" }
+ark-r1cs-std = "0.5.0"
+ark-groth16 = "0.5.0"
+ark-snark = "0.5.0" 
+ark-ff = { version = "0.5.0"}
+ark-relations = "0.5.1"
+ark-bn254 = "0.5.0"
+hex = ">=0.4, <0.5"
+sha2 = "0.10"
+client = { version = "0.1.0", path = "../client" }
+signal-cli-client = { path = "src/signal_cli_client" }
+petname = "2.0.2"
+image = "0.25.6"
+identicon-rs = "6.0.2"
+rand_core = "0.9.3"
+ark-std = "0.5"
+
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
