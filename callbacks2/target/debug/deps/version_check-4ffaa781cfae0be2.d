@@ -1,0 +1,10 @@
+/Users/oliwiakempinski/Documents/GitHub/callbacks/target/debug/deps/libversion_check-4ffaa781cfae0be2.rmeta: /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/lib.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/version.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/channel.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/date.rs
+
+/Users/oliwiakempinski/Documents/GitHub/callbacks/target/debug/deps/libversion_check-4ffaa781cfae0be2.rlib: /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/lib.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/version.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/channel.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/date.rs
+
+/Users/oliwiakempinski/Documents/GitHub/callbacks/target/debug/deps/version_check-4ffaa781cfae0be2.d: /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/lib.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/version.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/channel.rs /Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/date.rs
+
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/lib.rs:
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/version.rs:
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/channel.rs:
+/Users/oliwiakempinski/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4/src/date.rs:

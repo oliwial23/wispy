@@ -1,0 +1,35 @@
+workspace = { members = ["zk-object"] }
+
+[package]
+name = "zk-callbacks"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ark-crypto-primitives = { version = "0.5.0", default-features = true, features = ["crh", "r1cs", "merkle_tree"] }
+ark-ec = "0.5.0"
+ark-bls12-381 = "0.5.0"
+zk-object = { path = "zk-object" }
+ark-snark = "0.5.0"
+ark-ff = "0.5.0"
+ark-r1cs-std = "0.5.0"
+ark-relations = "0.5.0"
+ark-groth16 = "0.5.0"
+rand = "0.8.5"
+ark-bn254 = { version = "0.5.0", features = ["r1cs"] }
+ark-serialize = { version = "0.5.0", features = ["ark-serialize-derive", "derive", "std"] }
+circom_poseidon = { path = "circom-poseidon", optional = true }
+folding-schemes = { git = "https://github.com/privacy-scaling-explorations/sonobe", package = "folding-schemes", optional = true }
+nalgebra = "0.33.2"
+ark-grumpkin = { version = "0.5.0", features = ["r1cs"] }
+blake2 = "0.10.6"
+ark-ed-on-bls12-381 = { version = "0.5.0", features = ["ark-r1cs-std", "r1cs", "std"] }
+ark-bls12-377 = { version = "0.5.0", features = ["r1cs"] }
+ark-ed-on-bls12-377 = { version = "0.5.0", features = ["r1cs"] }
+
+[features]
+asynchr = []
+circposeidon = ["dep:circom_poseidon"]
+folding = ["dep:folding-schemes"]
