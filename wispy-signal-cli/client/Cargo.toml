@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 # zk-callbacks = { path = "/Users/oliwiakempinski/Documents/GitHub/callbacks" }
 # zk-callbacks = { path = "/Users/rachelthomas/Documents/Anon_Group_Chat/callbacks2" }
-zk-callbacks = { path = "../../callbacks" }
+zk-callbacks = { path = "../../callbacks2" }
 common = { version = "0.1.0", path = "../common" }
 ark-snark = "0.5.1"
 ark-relations = "0.5.1"
