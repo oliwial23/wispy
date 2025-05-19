@@ -33,7 +33,14 @@ This must be running first.
 
 ---
 
-### **Build and Install the CLI Tool**
+
+
+### **Terminal 2: Run the Axum Server**
+
+```bash
+cd wispy-signal-cli/
+```
+
 
 Run the following command to build the project and make the binary globally accessible (temporarily for your current terminal session):
 
@@ -53,13 +60,6 @@ source ~/.zshrc
 > source ~/.zshrc
 > ```
 
-
-### **Terminal 2: Run the Axum Server**
-
-```bash
-cd wispy-signal-cli/
-cargo build --release
-```
 
 Add your CLI binary to your `$PATH`:
 
