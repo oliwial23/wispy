@@ -67,6 +67,23 @@ pub struct PseudonymArgsVar<F: PrimeField> {
     pub claimed: FpVar<F>,
 }
 
+impl<F: PrimeField> AllocVar<PseudonymArgs<F>, F> for PseudonymArgsVar<F> {
+    fn new_variable<T: Borrow<PseudonymArgs<F>>>(
+        cs: impl Into<Namespace<F>>,
+        f: impl FnOnce() -> Result<T, SynthesisError>,
+        mode: AllocationMode,
+    ) -> Result<Self, SynthesisError> {
+        let ns = cs.into();
+        let cs = ns.cs(); // ConstraintSystemRef<F>
+
+        let PseudonymArgs { context, claimed } = *f()?.borrow();
+        Ok(Self {
+            context: FpVar::new_variable(cs.clone(), || Ok(context), mode)?,
+            claimed: FpVar::new_variable(cs, || Ok(claimed), mode)?,
+        })
+    }
+}
+
 #[derive(Clone, Debug, Default, CanonicalDeserialize, CanonicalSerialize)]
 pub struct BadgesArgs<F: PrimeField> {
     pub i: F,
@@ -91,23 +108,6 @@ impl<F: PrimeField> AllocVar<BadgesArgs<F>, F> for BadgesArgsVar<F> {
         let BadgesArgs { i, claimed } = *f()?.borrow();
         Ok(Self {
             i: FpVar::new_variable(cs.clone(), || Ok(i), mode)?,
-            claimed: FpVar::new_variable(cs, || Ok(claimed), mode)?,
-        })
-    }
-}
-
-impl<F: PrimeField> AllocVar<PseudonymArgs<F>, F> for PseudonymArgsVar<F> {
-    fn new_variable<T: Borrow<PseudonymArgs<F>>>(
-        cs: impl Into<Namespace<F>>,
-        f: impl FnOnce() -> Result<T, SynthesisError>,
-        mode: AllocationMode,
-    ) -> Result<Self, SynthesisError> {
-        let ns = cs.into();
-        let cs = ns.cs(); // ConstraintSystemRef<F>
-
-        let PseudonymArgs { context, claimed } = *f()?.borrow();
-        Ok(Self {
-            context: FpVar::new_variable(cs.clone(), || Ok(context), mode)?,
             claimed: FpVar::new_variable(cs, || Ok(claimed), mode)?,
         })
     }

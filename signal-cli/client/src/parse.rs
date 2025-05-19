@@ -14,7 +14,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Command {
     /// View messages posted.
-    ViewPosts,
+    // ViewPosts,
 
     /// Send message + update server with callback.
     Post {

@@ -54,6 +54,7 @@ pub struct PollPseudonymProofEntry {
 fn save_struct(user: &User<F, MsgUser>) -> std::io::Result<()> {
     let file = File::create("client/user.bin")?;
     let mut writer = BufWriter::new(file);
+    // user.serialize_with_mode(&mut writer, Compress::No).unwrap();
     user.data
         .serialize_with_mode(&mut writer, Compress::No)
         .unwrap();
@@ -72,6 +73,11 @@ fn save_struct(user: &User<F, MsgUser>) -> std::io::Result<()> {
     writer.flush()?;
     Ok(())
 }
+
+// thread 'tokio-runtime-worker' panicked at client/src/helpers.rs:319:30:
+// called `Result::unwrap()` on an `Err` value: Custom { kind: InvalidData, error: "IoError(Error { kind: UnexpectedEof, message: \"failed to fill whole buffer\" })" }
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// [gen_cb_for_msg] Panic inside task: JoinError::Panic(Id(15), "called `Result::unwrap()` on an `Err` value: Custom { kind: InvalidData, error: \"IoError(Error { kind: UnexpectedEof, message: \\\"failed to fill whole buffer\\\" })\" }", ...)
 
 fn load_struct() -> std::io::Result<User<F, MsgUser>> {
     let file = File::open("client/user.bin")?;

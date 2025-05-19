@@ -21,7 +21,7 @@ use axum::{
 use common::{
     zk::{arg_ban, arg_rep, get_callbacks, get_extra_pubdata_for_scan2, MsgUser},
     Args, Cr, Snark, E, F,
-};
+}; 
 use identicon_rs::Identicon;
 use petname::{Generator, Petnames};
 use rand::{
@@ -169,16 +169,16 @@ pub async fn forward_jsonrpc(
             exec.new_object.clone(),
             exec.old_nullifier.clone(),
             F::from(0),
-            exec.cb_com_list.clone(), // cb_coms.clone(),
+            exec.cb_com_list.clone(), 
             exec.proof.clone(),
             None,
             &vk,
         );
 
-    let cb_tickets = &exec.cb_tik_list; // get callback tickets
+    let cb_tickets = &exec.cb_tik_list;
 
     for (cb_com, _) in cb_tickets.iter() {
-        // let cb_entry = &cb_com.cb_entry;
+
 
         let mut file = OpenOptions::new()
             .append(true)
@@ -205,9 +205,8 @@ pub async fn forward_jsonrpc(
     let cb_methods = get_callbacks();
     let res = db
         .approve_interaction_and_store::<MsgUser, Groth16<E>, F, GRSchnorrObjStore, Poseidon<2>, 1>(
-            exec,                 // output of interaction
-            FakeSigPrivkey::sk(), // for authenticity: verify rerandomization of key produces
-            // proper tickets (here it doesn't matter)
+            exec,                 
+            FakeSigPrivkey::sk(), 
             F::from(0),
             &db.obj_bul.clone(),
             cb_methods.clone(),
@@ -251,7 +250,7 @@ pub async fn forward_jsonrpc(
             let ts = parsed["timestamp"].as_i64().unwrap();
             println!("Timestamp: {}", ts);
 
-            // Read all lines ===
+            // Read all lines
             let path = "server/zkpair_log.jsonl";
             let lines = std::fs::read_to_string(path)
                 .unwrap()
