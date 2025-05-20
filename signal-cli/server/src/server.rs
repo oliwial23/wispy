@@ -144,6 +144,7 @@ pub struct JsonAuthorship {
     group_id: String,
 }
 
+
 #[derive(Deserialize)]
 pub struct JsonBadge {
     proof: Vec<u8>,

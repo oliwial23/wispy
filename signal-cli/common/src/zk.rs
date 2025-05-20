@@ -40,9 +40,9 @@ use crate::H;
 use crate::PK;
 use crate::Snark;
 
-pub const NUM_INTS_BEFORE_SCAN: usize = 5;
-pub const BAN_FLAG: u64 = 999999999;
+pub const NUM_INTS_BEFORE_SCAN: usize = 101;
 pub const MAX_PSEUDO: usize = 4;
+const BAN_FLAG: u64 = 999999999;
 
 #[scannable_zk_object(F)]
 #[derive(Default, CanonicalSerialize, CanonicalDeserialize)]

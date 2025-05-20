@@ -1,5 +1,7 @@
 use crate::bul::BulNet;
-
+use std::fs::{OpenOptions};
+use std::time::{Duration, Instant};
+use chrono::Utc;
 use anyhow::Result;
 use ark_bn254::Fr;
 use ark_ff::{BigInteger, BigInteger256, PrimeField, ToConstraintField};
@@ -125,7 +127,45 @@ pub fn join2() -> Result<()> {
     Ok(())
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct TimingEntry {
+    timestamp: String,
+    label: String,
+    duration_seconds: f64,
+}
+
+pub fn write_timing(label: &str, duration: Duration, file_path: &str) -> std::io::Result<()> {
+    let entry = TimingEntry {
+        timestamp: Utc::now().to_rfc3339(),
+        label: label.to_string(),
+        duration_seconds: duration.as_secs_f64(),
+    };
+
+    // Read existing entries, or start fresh
+    let mut entries: Vec<TimingEntry> = if let Ok(file) = File::open(file_path) {
+        let reader = BufReader::new(file);
+        serde_json::from_reader(reader).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    // Append new entry
+    entries.push(entry);
+
+    // Write all entries back
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(file_path)?;
+    let writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(writer, &entries)?;
+
+    Ok(())
+}
+
 pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
+    let start_time = Instant::now();
     println!("[USER] Interacting (proving)...");
 
     let bul = BulNet::new(Url::parse("http://127.0.0.1:3000").unwrap());
@@ -159,6 +199,12 @@ pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
 
     let _ = save_struct(&user);
     println!("{:?}", user);
+
+    let duration = start_time.elapsed();
+    println!("Writing timing to file...");
+    if let Err(e) = write_timing("gen_cb_for_msg", duration, "client/timing_gen_cb_for_msg.json") {
+        eprintln!("Failed to write timing log: {}", e);
+    }
 
     Ok(payload)
 }

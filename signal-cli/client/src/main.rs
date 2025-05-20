@@ -6,6 +6,7 @@ use ark_ff::BigInteger256;
 use ark_ff::PrimeField;
 use ark_std::result::Result::Ok;
 use clap::Parser;
+
 use client::helpers::compute_pseudo_for_poll;
 use client::helpers::gen_pseudo;
 use client::helpers::get_claimed_context_by_index;
@@ -129,7 +130,7 @@ use client::helpers::rep;
 async fn main() {
     let cli = Cli::parse();
     let client = Client::new();
-
+    println!("Hi Emma");
     match cli.command {
         Command::ViewPosts => {
             println!("Fetching posts...");
