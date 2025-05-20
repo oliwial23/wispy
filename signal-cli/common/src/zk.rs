@@ -41,7 +41,8 @@ use crate::PK;
 use crate::Snark;
 
 pub const NUM_INTS_BEFORE_SCAN: usize = 5;
-const BAN_FLAG: u64 = 999999999;
+pub const BAN_FLAG: u64 = 999999999;
+pub const MAX_PSEUDO: usize = 4;
 
 #[scannable_zk_object(F)]
 #[derive(Default, CanonicalSerialize, CanonicalDeserialize)]
@@ -49,6 +50,7 @@ pub struct MsgUser {
     pub sk: F,
     pub reputation: F,
     pub num_interactions_since_last_scan: F,
+    pub pseudo_counter: F,
     pub banned: F,
     pub badge1: F,
     pub badge2: F,
@@ -84,6 +86,69 @@ impl<F: PrimeField> AllocVar<PseudonymArgs<F>, F> for PseudonymArgsVar<F> {
     }
 }
 
+// use ark_relations::r1cs::ToConstraintField;
+use ark_ff::ToConstraintField;
+
+impl<F: PrimeField> ToConstraintField<F> for PseudonymArgs<F> {
+    fn to_field_elements(&self) -> Option<Vec<F>> {
+        Some(vec![self.context, self.claimed])
+    }
+}
+
+pub fn pseudonym_pred<'a, 'b>(
+    tu: &'a UserVar<F, MsgUser>,
+    _com: &'b FpVar<F>,
+    pub_args: PseudonymArgsVar<F>,
+    _priv_args: (),
+) -> ArkResult<Boolean<F>> {
+    let context = pub_args.context;
+    let claimed = pub_args.claimed;
+    let derived = Poseidon::<2>::hash_in_zk(&[tu.data.sk.clone(), context.clone()])?;
+    derived.is_eq(&claimed)
+}
+
+#[derive(Clone, Debug, Default, CanonicalDeserialize, CanonicalSerialize)]
+pub struct PseudonymArgsRate<F: PrimeField> {
+    pub context: F,
+    pub claimed: F,
+    pub i: F,
+}
+
+#[derive(Clone)]
+pub struct PseudonymArgsRateVar<F: PrimeField> {
+    pub context: FpVar<F>,
+    pub claimed: FpVar<F>,
+    pub i: FpVar<F>,
+}
+
+impl<F: PrimeField> AllocVar<PseudonymArgsRate<F>, F> for PseudonymArgsRateVar<F> {
+    fn new_variable<T: Borrow<PseudonymArgsRate<F>>>(
+        cs: impl Into<Namespace<F>>,
+        f: impl FnOnce() -> Result<T, SynthesisError>,
+        mode: AllocationMode,
+    ) -> Result<Self, SynthesisError> {
+        let ns = cs.into();
+        let cs = ns.cs(); // ConstraintSystemRef<F>
+
+        let PseudonymArgsRate {
+            context,
+            claimed,
+            i,
+        } = *f()?.borrow();
+        Ok(Self {
+            context: FpVar::new_variable(cs.clone(), || Ok(context), mode)?,
+            claimed: FpVar::new_variable(cs.clone(), || Ok(claimed), mode)?,
+            i: FpVar::new_variable(cs, || Ok(i), mode)?,
+        })
+    }
+}
+
+impl<F: PrimeField> ToConstraintField<F> for PseudonymArgsRate<F> {
+    fn to_field_elements(&self) -> Option<Vec<F>> {
+        Some(vec![self.context, self.claimed, self.i])
+    }
+}
+
 #[derive(Clone, Debug, Default, CanonicalDeserialize, CanonicalSerialize)]
 pub struct BadgesArgs<F: PrimeField> {
     pub i: F,
@@ -111,6 +176,25 @@ impl<F: PrimeField> AllocVar<BadgesArgs<F>, F> for BadgesArgsVar<F> {
             claimed: FpVar::new_variable(cs, || Ok(claimed), mode)?,
         })
     }
+}
+
+pub fn badge_pred<'a, 'b>(
+    tu: &'a UserVar<F, MsgUser>,
+    _com: &'b FpVar<F>,
+    pub_args: BadgesArgsVar<F>,
+    _priv_args: (),
+) -> ArkResult<Boolean<F>> {
+    let claimed = pub_args.claimed;
+
+    let is_one = pub_args.i.is_eq(&FpVar::Constant(F::from(1)))?;
+    let is_two = pub_args.i.is_eq(&FpVar::Constant(F::from(2)))?;
+
+    let badge12 = FpVar::conditionally_select(&is_one, &tu.data.badge1, &tu.data.badge2)?;
+    let badge = FpVar::conditionally_select(&is_two, &badge12, &tu.data.badge3)?;
+
+    let x1 = badge.is_eq(&claimed)?;
+
+    Ok(x1)
 }
 
 #[derive(Clone, Default)]
@@ -151,18 +235,6 @@ impl<F: PrimeField> AllocVar<PseudonymArgsPair<F>, F> for PseudonymArgsPairVar<F
     }
 }
 
-pub fn pseudonym_pred<'a, 'b>(
-    tu: &'a UserVar<F, MsgUser>,
-    _com: &'b FpVar<F>,
-    pub_args: PseudonymArgsVar<F>,
-    _priv_args: (),
-) -> ArkResult<Boolean<F>> {
-    let context = pub_args.context;
-    let claimed = pub_args.claimed;
-    let derived = Poseidon::<2>::hash_in_zk(&[tu.data.sk.clone(), context.clone()])?;
-    derived.is_eq(&claimed)
-}
-
 pub fn authorship_pred<'a, 'b>(
     tu: &'a UserVar<F, MsgUser>,
     _com: &'b FpVar<F>,
@@ -184,26 +256,27 @@ pub fn authorship_pred<'a, 'b>(
     Ok(x1 & x2)
 }
 
-pub fn badge_pred<'a, 'b>(
-    tu: &'a UserVar<F, MsgUser>,
-    _com: &'b FpVar<F>,
-    pub_args: BadgesArgsVar<F>,
-    _priv_args: (),
-) -> ArkResult<Boolean<F>> {
-    let claimed = pub_args.claimed;
-
-    let is_one = pub_args.i.is_eq(&FpVar::Constant(F::from(1)))?;
-    let is_two = pub_args.i.is_eq(&FpVar::Constant(F::from(2)))?;
-
-    let badge12 = FpVar::conditionally_select(&is_one, &tu.data.badge1, &tu.data.badge2)?;
-    let badge = FpVar::conditionally_select(&is_two, &badge12, &tu.data.badge3)?;
-
-    let x1 = badge.is_eq(&claimed)?;
-
-    Ok(x1)
+fn standard_method(tu: &User<F, MsgUser>, _args: F, _priv: ()) -> User<F, MsgUser> {
+    let mut u = tu.clone();
+    u.data.num_interactions_since_last_scan += F::from(1);
+    u
 }
 
-fn standard_method(tu: &User<F, MsgUser>, _args: F, _priv: ()) -> User<F, MsgUser> {
+fn standard_pseudo_method(
+    tu: &User<F, MsgUser>,
+    _args: PseudonymArgs<F>,
+    _priv: (),
+) -> User<F, MsgUser> {
+    let mut u = tu.clone();
+    u.data.num_interactions_since_last_scan += F::from(1);
+    u
+}
+
+fn standard_pseudo_rate_method(
+    tu: &User<F, MsgUser>,
+    _args: PseudonymArgsRate<F>,
+    _priv: (),
+) -> User<F, MsgUser> {
     let mut u = tu.clone();
     u.data.num_interactions_since_last_scan += F::from(1);
     u
@@ -233,6 +306,74 @@ fn standard_predicate<'a>(
     let x8 = tu_new.data.badge3.is_eq(&tu_old.data.badge3)?;
 
     Ok(x1 & x2 & x3 & x4 & x5 & x6 & x7 & x8)
+}
+
+fn standard_pseudo_predicate<'a>(
+    tu_old: &'a UserVar<F, MsgUser>,
+    tu_new: &'a UserVar<F, MsgUser>,
+    pub_args: PseudonymArgsVar<F>,
+    _priv: (),
+) -> ArkResult<Boolean<F>> {
+    let x1 = tu_new.data.num_interactions_since_last_scan.is_eq(
+        &(tu_old.data.num_interactions_since_last_scan.clone() + FpVar::Constant(F::from(1))),
+    )?;
+    let x2 = tu_new.data.reputation.is_eq(&tu_old.data.reputation)?;
+    let x3 = tu_new
+        .data
+        .num_interactions_since_last_scan
+        .is_neq(&FpVar::Constant(F::from(NUM_INTS_BEFORE_SCAN as u64)))?;
+
+    // Make sure user is not banned
+    let x4 = tu_new.data.banned.is_eq(&FpVar::Constant(F::from(0)))?;
+    let x5 = tu_new.data.sk.is_eq(&tu_old.data.sk)?;
+
+    let x6 = tu_new.data.badge1.is_eq(&tu_old.data.badge1)?;
+    let x7 = tu_new.data.badge2.is_eq(&tu_old.data.badge2)?;
+    let x8 = tu_new.data.badge3.is_eq(&tu_old.data.badge3)?;
+
+    // Pseudonym check
+    let context = pub_args.context;
+    let claimed = pub_args.claimed;
+    let derived = Poseidon::<2>::hash_in_zk(&[tu_new.data.sk.clone(), context.clone()])?;
+    let x9 = derived.is_eq(&claimed)?;
+
+    Ok(x1 & x2 & x3 & x4 & x5 & x6 & x7 & x8 & x9)
+}
+
+fn standard_pseudo_rate_predicate<'a>(
+    tu_old: &'a UserVar<F, MsgUser>,
+    tu_new: &'a UserVar<F, MsgUser>,
+    pub_args: PseudonymArgsRateVar<F>,
+    _priv: (),
+) -> ArkResult<Boolean<F>> {
+    let x1 = tu_new.data.num_interactions_since_last_scan.is_eq(
+        &(tu_old.data.num_interactions_since_last_scan.clone() + FpVar::Constant(F::from(1))),
+    )?;
+    let x2 = tu_new.data.reputation.is_eq(&tu_old.data.reputation)?;
+    let x3 = tu_new
+        .data
+        .num_interactions_since_last_scan
+        .is_neq(&FpVar::Constant(F::from(NUM_INTS_BEFORE_SCAN as u64)))?;
+
+    // Make sure user is not banned
+    let x4 = tu_new.data.banned.is_eq(&FpVar::Constant(F::from(0)))?;
+    let x5 = tu_new.data.sk.is_eq(&tu_old.data.sk)?;
+
+    let x6 = tu_new.data.badge1.is_eq(&tu_old.data.badge1)?;
+    let x7 = tu_new.data.badge2.is_eq(&tu_old.data.badge2)?;
+    let x8 = tu_new.data.badge3.is_eq(&tu_old.data.badge3)?;
+
+    // Pseudonym check
+    let context = pub_args.context;
+    let claimed = pub_args.claimed;
+    let i = pub_args.i;
+
+    let x9 = i.is_neq(&FpVar::Constant(F::from(MAX_PSEUDO as u64)))?;
+
+    let derived = Poseidon::<2>::hash_in_zk(&[tu_new.data.sk.clone(), context, i])?;
+    let x10 = derived.is_eq(&claimed)?;
+
+    Ok(x1 & x2 & x3 & x4 & x5 & x6 & x7 & x8 & x9 & x10)
 }
 
 pub fn arg_rep(n: i64) -> Fr {
@@ -325,9 +466,38 @@ pub fn get_callbacks() -> Vec<Callback<F, MsgUser, Args, ArgsVar>> {
 
 pub type StandInt = Interaction<F, MsgUser, F, FpVar<F>, (), (), Args, ArgsVar, 1>;
 
+pub type PseudoStandInt =
+    Interaction<F, MsgUser, PseudonymArgs<F>, PseudonymArgsVar<F>, (), (), Args, ArgsVar, 1>;
+
+pub type PseudoRateStandInt = Interaction<
+    F,
+    MsgUser,
+    PseudonymArgsRate<F>,
+    PseudonymArgsRateVar<F>,
+    (),
+    (),
+    Args,
+    ArgsVar,
+    1,
+>;
+
 pub fn get_standard_interaction() -> StandInt {
     Interaction {
         meth: (standard_method, standard_predicate),
+        callbacks: get_callbacks().try_into().unwrap(),
+    }
+}
+
+pub fn get_standard_pseudo_interaction() -> PseudoStandInt {
+    Interaction {
+        meth: (standard_pseudo_method, standard_pseudo_predicate),
+        callbacks: get_callbacks().try_into().unwrap(),
+    }
+}
+
+pub fn get_standard_pseudo_rate_interaction() -> PseudoRateStandInt {
+    Interaction {
+        meth: (standard_pseudo_rate_method, standard_pseudo_rate_predicate),
         callbacks: get_callbacks().try_into().unwrap(),
     }
 }
@@ -344,6 +514,50 @@ pub fn exec_standint<Bul: PublicUserBul<F, MsgUser>>(
     user.exec_method_create_cb::<H, F, FpVar<F>, (), (), Args, ArgsVar, Cr, Snark, Bul, 1>(
         rng,
         get_standard_interaction(),
+        [FakeSigPubkey::pk()],
+        cur_time,
+        bul,
+        true,
+        pk,
+        pub_args,
+        priv_args,
+    )
+}
+
+pub fn exec_pseudo_standint<Bul: PublicUserBul<F, MsgUser>>(
+    user: &mut User<F, MsgUser>,
+    rng: &mut (impl CryptoRng + RngCore),
+    bul: &Bul,
+    pk: &PK,
+    cur_time: Time<F>,
+    pub_args: PseudonymArgs<F>,
+    priv_args: (),
+) -> ArkResult<ExecutedMethod<F, Snark, Args, Cr, 1>> {
+    user.exec_method_create_cb::<H, PseudonymArgs<F>, PseudonymArgsVar<F>, (), (), Args, ArgsVar, Cr, Snark, Bul, 1>(
+        rng,
+        get_standard_pseudo_interaction(),
+        [FakeSigPubkey::pk()],
+        cur_time,
+        bul,
+        true,
+        pk,
+        pub_args,
+        priv_args,
+    )
+}
+
+pub fn exec_pseudo_rate_standint<Bul: PublicUserBul<F, MsgUser>>(
+    user: &mut User<F, MsgUser>,
+    rng: &mut (impl CryptoRng + RngCore),
+    bul: &Bul,
+    pk: &PK,
+    cur_time: Time<F>,
+    pub_args: PseudonymArgsRate<F>,
+    priv_args: (),
+) -> ArkResult<ExecutedMethod<F, Snark, Args, Cr, 1>> {
+    user.exec_method_create_cb::<H, PseudonymArgsRate<F>, PseudonymArgsRateVar<F>, (), (), Args, ArgsVar, Cr, Snark, Bul, 1>(
+        rng,
+        get_standard_pseudo_rate_interaction(),
         [FakeSigPubkey::pk()],
         cur_time,
         bul,
@@ -444,3 +658,128 @@ pub fn get_extra_pubdata_for_scan2(
         cb_methods: get_callbacks(),
     }
 }
+
+// use ark_crypto_primitives::snark::SNARK;
+// use ark_crypto_primitives::sponge::Absorb;
+// use ark_std::marker::PhantomData;
+// use rand::distributions::Standard;
+// use rand::prelude::Distribution;
+// use zk_callbacks::crypto::enc::AECipherSigZK;
+// use zk_callbacks::crypto::hash::FieldHash;
+// use zk_callbacks::generic::callbacks::CallbackCom;
+// use zk_callbacks::generic::interaction::CallbackList;
+// use zk_callbacks::generic::interaction::ExecMethodCircuit;
+// use zk_callbacks::generic::interaction::MethProof;
+// use zk_callbacks::generic::user::UserData;
+
+// #[derive(Clone)]
+// pub struct PseudoInteraction<
+//     F: PrimeField + Absorb,
+//     U: UserData<F>,
+//     PubArgs: Clone,
+//     PubArgsVar: AllocVar<PubArgs, F>,
+//     PrivArgs: Clone,
+//     PrivArgsVar: AllocVar<PrivArgs, F>,
+//     CBArgs: Clone,
+//     CBArgsVar: AllocVar<CBArgs, F>,
+//     const NUMCBS: usize,
+// > {
+//     /// A method and a predicate. For example, one may have an update method, with a predicate
+//     /// enforcing some reputation status.
+//     pub meth: MethProof<F, U, PubArgs, PubArgsVar, PrivArgs, PrivArgsVar>,
+//     /// A list of callbacks.
+//     pub callbacks: CallbackList<F, U, CBArgs, CBArgsVar, NUMCBS>,
+// }
+
+// impl<
+//     F: PrimeField + Absorb,
+//     U: UserData<F> + Default,
+//     PubArgs: Clone + Default + std::fmt::Debug,
+//     PubArgsVar: AllocVar<PubArgs, F> + Clone,
+//     PrivArgs: Clone + Default + std::fmt::Debug,
+//     PrivArgsVar: AllocVar<PrivArgs, F> + Clone,
+//     CBArgs: Clone + Default + std::fmt::Debug,
+//     CBArgsVar: AllocVar<CBArgs, F> + Clone,
+//     const NUMCBS: usize,
+// > PseudoInteraction<F, U, PubArgs, PubArgsVar, PrivArgs, PrivArgsVar, CBArgs, CBArgsVar, NUMCBS>
+// where
+//     Standard: Distribution<F>,
+// {
+//     pub fn generate_keys<
+//         H: FieldHash<F>,
+//         Snark: SNARK<F>,
+//         Crypto: AECipherSigZK<F, CBArgs>,
+//         Bul: PublicUserBul<F, U>,
+//     >(
+//         &self,
+//         rng: &mut (impl CryptoRng + RngCore),
+//         memb_data: Option<Bul::MembershipPub>,
+//         aux_data: Option<PubArgs>,
+//         is_scan: bool,
+//     ) -> (Snark::ProvingKey, Snark::VerifyingKey) {
+//         let u = User::create(U::default(), rng);
+
+//         let cbs: [CallbackCom<F, CBArgs, Crypto>; NUMCBS] =
+//             create_defaults((*self).clone(), <Time<F>>::default());
+
+//         let x = (*self).clone();
+
+//         let out: ExecMethodCircuit<
+//             F,
+//             H,
+//             U,
+//             PubArgs,
+//             PubArgsVar,
+//             PrivArgs,
+//             PrivArgsVar,
+//             CBArgs,
+//             CBArgsVar,
+//             Crypto,
+//             Bul,
+//             NUMCBS,
+//         > = ExecMethodCircuit {
+//             priv_old_user: u.clone(),
+//             priv_new_user: u.clone(),
+//             priv_issued_callbacks: cbs.clone(),
+//             priv_bul_membership_witness: Bul::MembershipWitness::default(),
+//             priv_args: PrivArgs::default(),
+
+//             pub_new_com: u.commit::<H>(),
+//             pub_old_nul: u.zk_fields.nul,
+//             pub_issued_callback_coms: cbs.map(|x| x.commit::<H>()),
+//             pub_args: aux_data.unwrap_or_default(),
+//             associated_method: x,
+//             is_scan,
+//             bul_memb_is_const: memb_data.is_some(),
+//             pub_bul_membership_data: memb_data.unwrap_or_default(),
+//             _phantom_hash: PhantomData,
+//         };
+
+//         Snark::circuit_specific_setup(out, rng).unwrap()
+//     }
+// }
+// use ark_crypto_primitives::sponge::Absorb;
+
+// pub enum PredicateMethod<F: PrimeField + Absorb> {
+//     Old(
+//         for<'a, 'b> fn(
+//             &'a UserVar<F, MsgUser>,
+//             &'b UserVar<F, MsgUser>,
+//             FpVar<F>,
+//             (),
+//         ) -> Result<(), SynthesisError>,
+//     ),
+//     New(
+//         for<'a> fn(
+//             &'a UserVar<F, MsgUser>,
+//             &'a UserVar<F, MsgUser>,
+//             PseudonymArgsVar<F>,
+//             (),
+//         ) -> Result<(), SynthesisError>,
+//     ),
+// }
+
+// pub struct Interaction<F: PrimeField> {
+//     pub meth: PredicateMethod<F>,
+//     pub callbacks: Vec<Callback<F>>,
+// }

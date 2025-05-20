@@ -10,12 +10,14 @@ use client::helpers::compute_pseudo_for_poll;
 use client::helpers::gen_pseudo;
 use client::helpers::get_claimed_context_by_index;
 use client::helpers::list_all_pseudos_from_log;
+use client::helpers::lookup_context;
 use client::helpers::make_authorship_proof;
 use client::helpers::make_badge_proof;
 use client::helpers::pseudo_proof_vote;
 use client::helpers::pseudo_proof_with_msg;
+use client::helpers::rate_pseudo_proof_with_msg;
 use client::helpers::string_to_f;
-use client::helpers::{ban, gen_cb_for_msg, join2, scan};
+use client::helpers::{ban, gen_cb_for_msg, join2, prf2, scan};
 use common::F;
 use reqwest::Client;
 use serde::Deserialize;
@@ -109,6 +111,17 @@ struct ContextResponse {
     context: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct ContextRequest {
+    thread: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ContextJson {
+    thread: String,
+    context: String,
+}
+
 use client::helpers::rep;
 // use client::helpers::update_reaction_log;
 
@@ -118,16 +131,24 @@ async fn main() {
     let client = Client::new();
 
     match cli.command {
+        Command::ViewPosts => {
+            println!("Fetching posts...");
+            // Call view logic here
+        }
+
         // signal-cli-client -a +491724953171 --json-rpc-http "http://127.0.0.1:3000/api/jsonrpc" send -g VON5o2iTrMfkbvxB/ynpTJjU8TvAQd0Dq6oGG6PzCXc= -m 'Hello Rachel2'
         Command::Post { message, group_id } => {
             println!("Posting to group {}: {}", group_id, message);
 
             match spawn_blocking(|| gen_cb_for_msg()).await {
                 Ok(Ok(proof_bytes)) => {
+                    // Optional: base64 encode if needed
+                    // let proof = base64::encode(&proof_bytes);
+
                     let payload = JsonRpcInput {
                         message,
                         group_id,
-                        proof: proof_bytes,
+                        proof: proof_bytes, // add this to your input struct
                     };
 
                     let res = client
@@ -162,6 +183,7 @@ async fn main() {
             let context_f = F::from_bigint(BigInteger256::from_str(&context_str).unwrap()).unwrap();
             let claimed_f = F::from_bigint(BigInteger256::from_str(&claimed_str).unwrap()).unwrap();
 
+            // Call pseudo_proof2 in a blocking task
             match spawn_blocking(move || pseudo_proof_with_msg(claimed_f, context_f)).await {
                 Ok(Ok(proof)) => {
                     let payload = JsonRpcInputPseudo {
@@ -189,6 +211,56 @@ async fn main() {
             }
         }
 
+        Command::PostPseudoRate {
+            message,
+            group_id,
+            thread,
+            pseudo_idx,
+        } => {
+            println!("Posting to group {}: {}", group_id, message);
+
+            // let (claimed_str, _context_str) = get_claimed_context_by_index(pseudo_idx)
+            //     .or_else(|| get_claimed_context_by_index(1))
+            //     .expect("Both provided index and fallback index 1 failed");
+
+            // let context_f = F::from_bigint(BigInteger256::from_str(&context_str).unwrap()).unwrap();
+            // let claimed_f = F::from_bigint(BigInteger256::from_str(&claimed_str).unwrap()).unwrap();
+
+            let context_f = lookup_context(&thread)
+                .expect("Could not find matching context for thread in local file");
+
+            let i = F::from(pseudo_idx as u32);
+
+            let claimed_f = prf2(&context_f, &i);
+
+            match spawn_blocking(move || rate_pseudo_proof_with_msg(claimed_f, context_f, i)).await
+            {
+                Ok(Ok(proof)) => {
+                    let payload = JsonRpcInputPseudo {
+                        message,
+                        group_id,
+                        // pseudo_idx,
+                        proof,
+                    };
+
+                    let res = client
+                        .post("http://127.0.0.1:3000/api/jsonrpc/pseudo/rate")
+                        .json(&payload)
+                        .send()
+                        .await
+                        .unwrap();
+
+                    println!("Server responded: {}", res.text().await.unwrap());
+                }
+                Ok(Err(e)) => {
+                    eprintln!("[pseudo_proof_rate] Error: {:?}", e);
+                }
+                Err(join_err) => {
+                    eprintln!("[pseudo_proof_rate] Panic inside task: {:?}", join_err);
+                }
+            }
+        }
+
         Command::GenPseudo {} => {
             spawn_blocking(|| gen_pseudo()).await.unwrap();
         }
@@ -198,11 +270,70 @@ async fn main() {
                 .unwrap();
         }
 
+        Command::NewThreadCxt { message } => {
+            let req = ContextRequest {
+                thread: message.clone(),
+            };
+
+            let res = client
+                .post("http://127.0.0.1:3000/api/pseudo/new_thread_context")
+                .json(&req)
+                .send()
+                .await
+                .unwrap();
+
+            println!("Server responded: {}", res.text().await.unwrap());
+        }
+
+        Command::GetContexts => {
+            let res = client
+                .get("http://127.0.0.1:3000/api/pseudo/get_all_contexts")
+                .send()
+                .await
+                .expect("Request failed");
+
+            let status = res.status();
+            let body = res.text().await.unwrap();
+
+            if !status.is_success() {
+                eprintln!("Server error ({}): {}", status, body);
+                return;
+            }
+
+            // Ensure client directory exists
+            std::fs::create_dir_all("client").expect("Failed to create client dir");
+
+            // Write the full context.jsonl content to the client's file
+            use std::fs::File;
+            use std::io::Write;
+
+            let mut file = File::create("client/contexts.jsonl").expect("Failed to create file");
+            file.write_all(body.as_bytes())
+                .expect("Failed to write file");
+
+            println!("Downloaded all contexts to client/contexts.jsonl");
+        }
+
         Command::Scan {} => {
             println!("Scanning...");
 
             match spawn_blocking(|| scan()).await {
                 Ok(Ok(proof_bytes)) => {
+                    // Optional: base64 encode if needed
+                    // let proof = base64::encode(&proof_bytes);
+
+                    // let payload = JsonRpcInput {
+                    //     message,
+                    //     group_id,
+                    //     proof: proof_bytes, // add this to your input struct
+                    // };
+
+                    // let res = client
+                    //     .post("http://127.0.0.1:3000/api/interact/scan")
+                    //     .json(&proof_bytes)
+                    //     .send()
+                    //     .await
+                    //     .unwrap();
                     let res = client
                         .post("http://127.0.0.1:3000/api/interact/scan")
                         .body(proof_bytes) // sends raw binary, as expected
@@ -286,6 +417,12 @@ async fn main() {
             println!("Server responded: {}", res.text().await.unwrap());
         }
 
+        // Command::ThumbsUp { t } => {
+        //     update_reaction_log(t, 1).unwrap();
+        // }
+        // Command::ThumbsDown { t } => {
+        //     update_reaction_log(t, -1).unwrap();
+        // }
         Command::Reaction {
             group_id,
             emoji,
@@ -311,31 +448,36 @@ async fn main() {
             group_id,
             message,
             timestamp,
-        } => match spawn_blocking(|| gen_cb_for_msg()).await {
-            Ok(Ok(proof_bytes)) => {
-                let payload = JsonRpcReply {
-                    group_id,
-                    message,
-                    timestamp,
-                    proof: proof_bytes,
-                };
+        } => {
+            match spawn_blocking(|| gen_cb_for_msg()).await {
+                Ok(Ok(proof_bytes)) => {
+                    // Optional: base64 encode if needed
+                    // let proof = base64::encode(&proof_bytes);
 
-                let res = client
-                    .post("http://127.0.0.1:3000/api/reply")
-                    .json(&payload)
-                    .send()
-                    .await
-                    .unwrap();
+                    let payload = JsonRpcReply {
+                        group_id,
+                        message,
+                        timestamp,
+                        proof: proof_bytes,
+                    };
 
-                println!("Server responded: {}", res.text().await.unwrap());
+                    let res = client
+                        .post("http://127.0.0.1:3000/api/reply")
+                        .json(&payload)
+                        .send()
+                        .await
+                        .unwrap();
+
+                    println!("Server responded: {}", res.text().await.unwrap());
+                }
+                Ok(Err(e)) => {
+                    eprintln!("[gen_cb_for_msg] Error: {:?}", e);
+                }
+                Err(join_err) => {
+                    eprintln!("[gen_cb_for_msg] Panic inside task: {:?}", join_err);
+                }
             }
-            Ok(Err(e)) => {
-                eprintln!("[gen_cb_for_msg] Error: {:?}", e);
-            }
-            Err(join_err) => {
-                eprintln!("[gen_cb_for_msg] Panic inside task: {:?}", join_err);
-            }
-        },
+        }
 
         Command::ReplyPseudo {
             group_id,
@@ -343,6 +485,8 @@ async fn main() {
             timestamp,
             pseudo_idx,
         } => {
+            // Load the pseudonym context and claimed fields from log
+
             let (claimed_str, context_str) = get_claimed_context_by_index(pseudo_idx)
                 .or_else(|| get_claimed_context_by_index(1))
                 .expect("Both provided index and fallback index 1 failed");
@@ -350,6 +494,7 @@ async fn main() {
             let context_f = F::from_bigint(BigInteger256::from_str(&context_str).unwrap()).unwrap();
             let claimed_f = F::from_bigint(BigInteger256::from_str(&claimed_str).unwrap()).unwrap();
 
+            // Call pseudo_proof2 in a blocking task
             match spawn_blocking(move || pseudo_proof_with_msg(claimed_f, context_f)).await {
                 Ok(Ok(proof)) => {
                     let payload = JsonRpcReplyPseudo {
@@ -400,6 +545,9 @@ async fn main() {
             let context_str = context_resp.context;
             let context_f = F::from_bigint(BigInteger256::from_str(&context_str).unwrap()).unwrap();
             let claimed_f = compute_pseudo_for_poll(&context_f);
+
+            // let context_f = F::from_bigint(BigInteger256::from_str(&context).unwrap()).unwrap();
+            // let claimed_f = compute_pseudo_for_poll(&context_f);
 
             match spawn_blocking(move || pseudo_proof_vote(claimed_f, context_f)).await {
                 Ok(Ok(proof)) => {

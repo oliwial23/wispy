@@ -21,7 +21,7 @@ use axum::{
 use common::{
     zk::{arg_ban, arg_rep, get_callbacks, get_extra_pubdata_for_scan2, MsgUser},
     Args, Cr, Snark, E, F,
-}; 
+};
 use identicon_rs::Identicon;
 use petname::{Generator, Petnames};
 use rand::{
@@ -169,16 +169,16 @@ pub async fn forward_jsonrpc(
             exec.new_object.clone(),
             exec.old_nullifier.clone(),
             F::from(0),
-            exec.cb_com_list.clone(), 
+            exec.cb_com_list.clone(), // cb_coms.clone(),
             exec.proof.clone(),
             None,
             &vk,
         );
 
-    let cb_tickets = &exec.cb_tik_list;
+    let cb_tickets = &exec.cb_tik_list; // get callback tickets
 
     for (cb_com, _) in cb_tickets.iter() {
-
+        // let cb_entry = &cb_com.cb_entry;
 
         let mut file = OpenOptions::new()
             .append(true)
@@ -205,8 +205,9 @@ pub async fn forward_jsonrpc(
     let cb_methods = get_callbacks();
     let res = db
         .approve_interaction_and_store::<MsgUser, Groth16<E>, F, GRSchnorrObjStore, Poseidon<2>, 1>(
-            exec,                 
-            FakeSigPrivkey::sk(), 
+            exec,                 // output of interaction
+            FakeSigPrivkey::sk(), // for authenticity: verify rerandomization of key produces
+            // proper tickets (here it doesn't matter)
             F::from(0),
             &db.obj_bul.clone(),
             cb_methods.clone(),
@@ -250,7 +251,7 @@ pub async fn forward_jsonrpc(
             let ts = parsed["timestamp"].as_i64().unwrap();
             println!("Timestamp: {}", ts);
 
-            // Read all lines
+            // Read all lines ===
             let path = "server/zkpair_log.jsonl";
             let lines = std::fs::read_to_string(path)
                 .unwrap()
@@ -321,8 +322,7 @@ pub async fn forward_jsonrpc_pseudo(
     info!("[SERVER] Verifying arbitrary predicate...");
 
     let mut state2 = state.write().await;
-    let vk = state2.keys.standard_verifying_key.clone();
-    let vki = state2.keys.pseudonym_pred_verifying_key.clone();
+    let vk = state2.keys.standard_pseudo_verifying_key.clone();
     let db = &mut state2.db;
 
     let mut reader = &input.proof[..];
@@ -331,36 +331,37 @@ pub async fn forward_jsonrpc_pseudo(
     let exec: ExecutedMethod<F, Snark, Args, Cr, 1> =
         ExecutedMethod::deserialize_with_mode(&mut reader, Compress::No, Validate::Yes).unwrap();
 
-    let proof = <Groth16<E> as SNARK<F>>::Proof::deserialize_with_mode(
-        &mut reader,
-        Compress::No,
-        Validate::Yes,
-    )
-    .unwrap();
-
     let pub_inputs: Vec<F> =
         Vec::<F>::deserialize_with_mode(&mut reader, Compress::No, Validate::Yes).unwrap();
-
-    let verified = Groth16::<E>::verify(&vki, &pub_inputs, &proof).unwrap();
-
-    info!("[SERVER] Verification result: {}", verified);
 
     let claimed = pub_inputs[1];
     info!("[SERVER] Claimed pseudonym: {}", claimed);
 
+    use crate::PseudonymArgs;
+
+    let pub_args = PseudonymArgs {
+        context: pub_inputs[0],
+        claimed: pub_inputs[1],
+    };
+
     // Store the interaction to the object bulletin board
-    let verify_store =
-        <GRSchnorrObjStore as UserBul<F, MsgUser>>::verify_interact_and_append::<F, Groth16<E>, 1>(
-            &mut db.obj_bul,
-            exec.new_object.clone(),
-            exec.old_nullifier.clone(),
-            F::from(0),
-            exec.cb_com_list.clone(),
-            exec.proof.clone(),
-            None,
-            &vk,
-        )
-        .unwrap();
+    let verify_store = <GRSchnorrObjStore as UserBul<F, MsgUser>>::verify_interact_and_append::<
+        PseudonymArgs<F>,
+        // F,
+        Groth16<E>,
+        1,
+    >(
+        &mut db.obj_bul,
+        exec.new_object.clone(),
+        exec.old_nullifier.clone(),
+        // F::from(0),
+        pub_args.clone(),
+        exec.cb_com_list.clone(),
+        exec.proof.clone(),
+        None,
+        &vk,
+    )
+    .unwrap();
 
     info!("[SERVER] Verification result: {:?}", verify_store);
 
@@ -386,9 +387,28 @@ pub async fn forward_jsonrpc_pseudo(
     }
 
     // Store callback-reputation merged record
-    // let claimed_str = claimed.to_string();
-    // let mut pseudo = format!("FROM: {}\n\n{}", claimed_str, input.message);
-    // Convert Fp to bytes (deterministic serialization)
+    let cb_methods = get_callbacks();
+    let res = db
+        .approve_interaction_and_store::<MsgUser, Groth16<E>, PseudonymArgs<F>, GRSchnorrObjStore, Poseidon<2>, 1>(
+            exec,                 
+            FakeSigPrivkey::sk(), 
+            pub_args,
+            &db.obj_bul.clone(),
+            cb_methods.clone(),
+            Time::from(0),
+            db.obj_bul.get_pubkey(),
+            true,
+            &vk,
+            332, // interaction number
+        );
+
+    info!("[SERVER] Verification result: {:?}", res);
+    if res.is_ok() {
+        info!("[SERVER] Verified and added to bulletin!");
+    } else {
+        info!("[SERVER] Verification failed. Not added to bulletin.");
+    }
+
     let claimed_bytes = claimed.into_bigint().to_bytes_le();
     let mut seed = [0u8; 32];
     seed[..claimed_bytes.len()].copy_from_slice(&claimed_bytes); // zero-pad to 32 bytes
@@ -485,6 +505,227 @@ pub async fn forward_jsonrpc_pseudo(
         Err(e) => format!("Failed to spawn process: {:?}", e),
     }
 }
+
+
+pub async fn forward_jsonrpc_pseudo_rate(
+    State(state): State<ServerLock>,
+    Json(input): Json<JsonRpcInputPseudo>,
+) -> impl IntoResponse {
+    info!("[SERVER] Verifying arbitrary predicate...");
+
+    let mut state2 = state.write().await;
+    let vk = state2.keys.standard_pseudor_verifying_key.clone();
+    let db = &mut state2.db;
+
+    let mut reader = &input.proof[..];
+
+    // Deserialize components in order
+    let exec: ExecutedMethod<F, Snark, Args, Cr, 1> =
+        ExecutedMethod::deserialize_with_mode(&mut reader, Compress::No, Validate::Yes).unwrap();
+
+    let pub_inputs: Vec<F> =
+        Vec::<F>::deserialize_with_mode(&mut reader, Compress::No, Validate::Yes).unwrap();
+
+    let claimed = pub_inputs[1];
+    info!("[SERVER] Claimed pseudonym: {}", claimed);
+    let context = pub_inputs[0];
+    info!("[SERVER] Context: {}", context);
+    let i = pub_inputs[2];
+    info!("[SERVER] i: {}", i);
+
+    // let thread = &input.thread;
+
+    let file = File::open("server/context.jsonl").expect("Failed to open file");
+    let reader = BufReader::new(file);
+
+    let mut matched_thread: Option<String> = None;
+    for line in reader.lines() {
+        let line = line.map_err(error_to_response).unwrap();
+        if let Ok(entry) = serde_json::from_str::<ContextJson>(&line) {
+            if entry.context == context.to_string() {
+                info!("[SERVER] Context matched thread: {}", entry.thread);
+                matched_thread = Some(entry.thread);
+                break;
+            }
+        }
+    }
+    
+    // Error if no match found
+    let thread = matched_thread.ok_or_else(|| {
+        error_to_response("Context not found in context.jsonl")
+    }).unwrap();
+
+    use crate::PseudonymArgsRate;
+
+    let pub_args = PseudonymArgsRate {
+        context,
+        claimed,
+        i,
+    };
+
+    // Store the interaction to the object bulletin board
+    let verify_store = <GRSchnorrObjStore as UserBul<F, MsgUser>>::verify_interact_and_append::<
+        PseudonymArgsRate<F>,
+        // F,
+        Groth16<E>,
+        1,
+    >(
+        &mut db.obj_bul,
+        exec.new_object.clone(),
+        exec.old_nullifier.clone(),
+        // F::from(0),
+        pub_args.clone(),
+        exec.cb_com_list.clone(),
+        exec.proof.clone(),
+        None,
+        &vk,
+    )
+    .unwrap();
+
+    info!("[SERVER] Verification result: {:?}", verify_store);
+
+    // Write callback commitments to log file
+    for (cb_com, _) in &exec.cb_tik_list {
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open("server/zkpair_log.jsonl")
+            .unwrap();
+
+        let mut bytes = vec![];
+        cb_com
+            .serialize_with_mode(&mut bytes, Compress::No)
+            .unwrap();
+
+        writeln!(
+            file,
+            "{{\"callback_com\": \"{}\", \"type\": \"cb\"}}",
+            hex::encode(bytes)
+        )
+        .unwrap();
+    }
+
+    // Store callback-reputation merged record
+    let cb_methods = get_callbacks();
+    let res = db
+        .approve_interaction_and_store::<MsgUser, Groth16<E>, PseudonymArgsRate<F>, GRSchnorrObjStore, Poseidon<2>, 1>(
+            exec,                 
+            FakeSigPrivkey::sk(), 
+            pub_args,
+            &db.obj_bul.clone(),
+            cb_methods.clone(),
+            Time::from(0),
+            db.obj_bul.get_pubkey(),
+            true,
+            &vk,
+            332, // interaction number
+        );
+
+    info!("[SERVER] Verification result: {:?}", res);
+    if res.is_ok() {
+        info!("[SERVER] Verified and added to bulletin!");
+    } else {
+        info!("[SERVER] Verification failed. Not added to bulletin.");
+    }
+
+    let claimed_bytes = claimed.into_bigint().to_bytes_le();
+    let mut seed = [0u8; 32];
+    seed[..claimed_bytes.len()].copy_from_slice(&claimed_bytes); // zero-pad to 32 bytes
+
+    // Use as RNG seed
+    let mut rng1 = StdRng::from_seed(seed);
+
+    let g = Petnames::default();
+    let name1 = g.generate(&mut rng1, 2, " ").expect("no name generated");
+
+    let mut pseudo = String::from("FROM: ");
+    pseudo.push_str(&name1);
+    pseudo.push_str("\n\n");
+    //pseudo.push_str(&claimed_str); // or name1, if preferred
+    //pseudo.push_str("\n\n");
+    pseudo.push_str(&input.message);
+
+    println!("Thread: {:?}", &thread);
+    println!("Petname: {}", name1);
+
+    let output = Command::new("signal-cli-client")
+        .arg("-a")
+        .arg("+15712811486")
+        .arg("--json-rpc-tcp")
+        .arg("127.0.0.1:7583")
+        .arg("send")
+        .arg("-g")
+        .arg(&input.group_id)
+        .arg("-m")
+        .arg(&pseudo)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await;
+
+    match output {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let parsed: Value = serde_json::from_str(&stdout).unwrap();
+            let ts = parsed["timestamp"].as_i64().unwrap();
+            println!("timestamp: {}", ts);
+
+            let path = "server/zkpair_log.jsonl";
+            let lines = std::fs::read_to_string(path)
+                .unwrap_or_default()
+                .lines()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>();
+
+            assert!(!lines.is_empty(), "Expected callback before merging");
+
+            let cb_val: Value = serde_json::from_str(&lines.last().unwrap()).unwrap();
+            let cb = cb_val["callback_com"].as_str().unwrap();
+
+            let mut file = std::fs::File::create(path).unwrap();
+            for line in &lines[..lines.len() - 1] {
+                writeln!(file, "{}", line).unwrap();
+            }
+
+            writeln!(
+                file,
+                "{{\"timestamp\": {}, \"reputation\": 0, \"cb\": \"{}\"}}",
+                ts, cb
+            )
+            .unwrap();
+
+            // Filter and clean up malformed entries
+            let lines = std::fs::read_to_string(path)
+                .unwrap()
+                .lines()
+                .filter_map(|line| {
+                    serde_json::from_str::<Value>(line).ok().and_then(|val| {
+                        val.get("timestamp")
+                            .and(val.get("reputation"))
+                            .and(val.get("cb"))
+                            .and_then(|_| val.as_object())
+                            .filter(|o| o.len() == 3)
+                            .map(|_| line.to_string())
+                    })
+                })
+                .collect::<Vec<_>>();
+
+            let mut file = std::fs::File::create(path).unwrap();
+            for line in lines {
+                writeln!(file, "{}", line).unwrap();
+            }
+
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if output.status.success() {
+                format!("Sent successfully: {}", stdout)
+            } else {
+                format!("Error sending: {}", stderr)
+            }
+        }
+        Err(e) => format!("Failed to spawn process: {:?}", e),
+    }
+}
+
 
 pub async fn pseudonym() -> impl IntoResponse {
     let petname = Petnames::default();
@@ -1467,6 +1708,40 @@ pub async fn handle_get_standard_proving_key(
 }
 
 #[tracing::instrument(skip_all)]
+pub async fn handle_get_standard_pseudo_proving_key(
+    State(state): State<ServerLock>,
+) -> Result<Bytes, ErrorResponse> {
+    info!("[GET] Standard pseudo proving key");
+    let mut keybuf = Vec::new();
+    state
+        .read()
+        .await
+        .keys
+        .standard_pseudo_proving_key
+        .serialize_with_mode(&mut keybuf, Compress::No)
+        .map_err(error_to_response)?;
+
+    Ok(keybuf.into())
+}
+
+#[tracing::instrument(skip_all)]
+pub async fn handle_get_standard_pseudor_proving_key(
+    State(state): State<ServerLock>,
+) -> Result<Bytes, ErrorResponse> {
+    info!("[GET] Standard pseudo proving key");
+    let mut keybuf = Vec::new();
+    state
+        .read()
+        .await
+        .keys
+        .standard_pseudor_proving_key
+        .serialize_with_mode(&mut keybuf, Compress::No)
+        .map_err(error_to_response)?;
+
+    Ok(keybuf.into())
+}
+
+#[tracing::instrument(skip_all)]
 pub async fn handle_get_scan_proving_key(
     State(state): State<ServerLock>,
 ) -> Result<Bytes, ErrorResponse> {
@@ -2027,4 +2302,103 @@ pub async fn forward_callback(Json(input): Json<TimestampInput>) -> impl IntoRes
             (StatusCode::NOT_FOUND, e.to_string()).into_response()
         }
     }
+}
+
+
+#[derive(Deserialize)]
+pub struct ContextRequest {
+    thread: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ContextJson {
+    thread: String,
+    context: String,
+}
+
+
+#[tracing::instrument(skip_all)]
+pub async fn handle_post_context_and_store(
+    State(_state): State<ServerLock>,
+    Json(input): Json<ContextRequest>,
+) -> Result<Bytes, ErrorResponse> {
+    use rand::rngs::OsRng;
+
+     // Check if thread already exists
+     if let Ok(file) = File::open("server/context.jsonl") {
+        let reader = BufReader::new(file);
+        for line in reader.lines() {
+            let line = line.map_err(error_to_response)?;
+            if let Ok(existing) = serde_json::from_str::<ContextJson>(&line) {
+                if existing.thread == input.thread {
+                    // Already exists — return the existing entry
+                    let response = serde_json::to_string(&existing).map_err(error_to_response)?;
+                    return Ok(Bytes::from(response));
+                }
+            }
+        }
+    }
+
+    // 1. Generate a random field element
+    let mut rng = OsRng;
+    let context = F::rand(&mut rng);
+    let context_str = context.into_bigint().to_string();
+
+    // 2. Create the JSON object
+    let json_obj = ContextJson {
+        thread: input.thread.clone(),
+        context: context_str,
+    };
+
+    // 3. Convert to a single JSON line
+    let json_line = serde_json::to_string(&json_obj)
+        .map_err(error_to_response)?
+        + "\n";
+
+    // 4. Append to file
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("server/context.jsonl")
+        .map_err(error_to_response)?;
+    file.write_all(json_line.as_bytes())
+        .map_err(error_to_response)?;
+
+    // 5. Return JSON response
+    Ok(Bytes::from(json_line))
+}
+
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+
+// #[tracing::instrument(skip_all)]
+// pub async fn handle_get_context_by_thread(
+//     State(_state): State<ServerLock>,
+//     Json(query): Json<ContextRequest>,
+// ) -> Result<Bytes, ErrorResponse> {
+//     // Open the JSONL file
+//     let file = File::open("server/context.jsonl").map_err(error_to_response)?;
+//     let reader = BufReader::new(file);
+
+//     // Iterate over each JSONL line
+//     for line in reader.lines() {
+//         let line = line.map_err(error_to_response)?;
+//         if let Ok(entry) = serde_json::from_str::<ContextJson>(&line) {
+//             if entry.thread == query.thread {
+//                 let response = serde_json::to_string(&entry).map_err(error_to_response)?;
+//                 return Ok(Bytes::from(response));
+//             }
+//         }
+//     }
+
+//     Err("Thread not found".into())
+
+// }
+
+#[tracing::instrument(skip_all)]
+pub async fn handle_get_all_contexts(
+    State(_state): State<ServerLock>,
+) -> Result<Bytes, ErrorResponse> {
+    let content = std::fs::read_to_string("server/context.jsonl").map_err(error_to_response)?;
+    Ok(Bytes::from(content))
 }

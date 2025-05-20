@@ -14,7 +14,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Command {
     /// View messages posted.
-    // ViewPosts,
+    ViewPosts,
 
     /// Send message + update server with callback.
     Post {
@@ -37,14 +37,32 @@ pub enum Command {
         group_id: String,
 
         /// Send using a pseudonym. Give the index of the pseudonym. For more details, call "pseudo-index"
-        #[arg(long = "pseudo-idx", short = 'p')]
+        #[arg(long = "pseudo-idx", short = 'i')]
+        pseudo_idx: usize,
+    },
+
+    PostPseudoRate {
+        /// Message to be sent anonymously
+        #[arg(long = "message", short = 'm')]
+        message: String,
+
+        /// Group id for group message
+        #[arg(long = "group-id", short = 'g')]
+        group_id: String,
+
+        /// Message to be sent anonymously
+        #[arg(long = "thread", short = 't')]
+        thread: String,
+
+        /// Send using a pseudonym. Give the index of the pseudonym. For more details, call "pseudo-index"
+        #[arg(long = "pseudo-idx", short = 'i')]
         pseudo_idx: usize,
     },
 
     Pseudonym,
     GenPseudo,
     Scan,
-
+    // PseudoContext,
     /// Submit vote for a poll
     Vote {
         /// Group id of group message to react to
@@ -160,6 +178,7 @@ pub enum Command {
         pseudo_idx: usize,
     },
 
+    GetContexts,
     Poll {
         /// Message for poll for group members to vote on
         #[arg(long = "message", short = 'm')]
@@ -200,5 +219,14 @@ pub enum Command {
 
         #[arg(long = "badge", short = 'b')]
         claimed: String,
+    },
+
+    NewThreadCxt {
+        /// Message for poll for group members to vote on
+        #[arg(long = "message", short = 'm')]
+        message: String,
+        // /// Group id for the poll
+        // #[arg(long = "group-id", short = 'g')]
+        // group_id: String,
     },
 }

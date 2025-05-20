@@ -8,7 +8,10 @@ use ark_relations::r1cs::SynthesisError;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use ark_std::{fs, result::Result::Ok, UniformRand};
 use common::{
-    zk::{exec_scanint, exec_standint, pseudonym_pred, MsgUser, PseudonymArgs, PseudonymArgsVar},
+    zk::{
+        exec_pseudo_standint, exec_scanint, exec_standint, pseudonym_pred, MsgUser, PseudonymArgs,
+        PseudonymArgsVar,
+    },
     E, F,
 };
 use petname::{Generator, Petnames};
@@ -54,7 +57,6 @@ pub struct PollPseudonymProofEntry {
 fn save_struct(user: &User<F, MsgUser>) -> std::io::Result<()> {
     let file = File::create("client/user.bin")?;
     let mut writer = BufWriter::new(file);
-    // user.serialize_with_mode(&mut writer, Compress::No).unwrap();
     user.data
         .serialize_with_mode(&mut writer, Compress::No)
         .unwrap();
@@ -74,11 +76,6 @@ fn save_struct(user: &User<F, MsgUser>) -> std::io::Result<()> {
     Ok(())
 }
 
-// thread 'tokio-runtime-worker' panicked at client/src/helpers.rs:319:30:
-// called `Result::unwrap()` on an `Err` value: Custom { kind: InvalidData, error: "IoError(Error { kind: UnexpectedEof, message: \"failed to fill whole buffer\" })" }
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-// [gen_cb_for_msg] Panic inside task: JoinError::Panic(Id(15), "called `Result::unwrap()` on an `Err` value: Custom { kind: InvalidData, error: \"IoError(Error { kind: UnexpectedEof, message: \\\"failed to fill whole buffer\\\" })\" }", ...)
-
 fn load_struct() -> std::io::Result<User<F, MsgUser>> {
     let file = File::open("client/user.bin")?;
     let mut reader = BufReader::new(file);
@@ -93,13 +90,15 @@ pub fn join2() -> Result<()> {
     let bul = BulNet::new(Url::parse("http://127.0.0.1:3000").unwrap());
 
     let mut rng = OsRng;
+    let sk = F::rand(&mut rng);
 
     // Create a new user
     let user = User::create(
         MsgUser {
-            sk: F::from(0),
+            sk,
             reputation: F::from(0),
             num_interactions_since_last_scan: F::from(0),
+            pseudo_counter: F::from(0),
             banned: F::from(0),
             badge1: F::from(0),
             badge2: F::from(0),
@@ -118,6 +117,7 @@ pub fn join2() -> Result<()> {
 
     // Delete pseudo_log.jsonl if it exists
     let _ = fs::remove_file("client/pseudo_log.jsonl");
+    let _ = fs::remove_file("client/contexts.jsonl");
 
     // Generate new pseudo proof
     gen_pseudo();
@@ -191,85 +191,6 @@ pub fn scan() -> Result<Vec<u8>, SynthesisError> {
     Ok(payload2)
 }
 
-// pub fn ban(timestamp: u64) -> Result<()> {
-//     // Open file and parse all JSON lines
-//     let file = File::open("server/zkpair_log.jsonl").context("Failed to open JSONL file")?;
-//     let reader = BufReader::new(file);
-
-//     for line in reader.lines() {
-//         let line = line?;
-//         let json: Value = serde_json::from_str(&line)?;
-
-//         if json.get("timestamp").and_then(|t| t.as_u64()) == Some(timestamp) {
-//             // Extract the callback commitment
-//             let cb_str = json
-//                 .get("cb")
-//                 .and_then(|v| v.as_str())
-//                 .context("Missing or invalid `cb` field")?;
-
-//             let cb_bytes = Vec::from_hex(cb_str)?;
-//             let cb: CallbackCom<Fr, Fr, PlainTikCrypto<Fr>> =
-//                 CanonicalDeserialize::deserialize_compressed(&cb_bytes[..])?;
-
-//             // Send ban
-//             let bul = BulNet::new(Url::parse("http://127.0.0.1:3000").unwrap());
-//             let url = bul.api.join("api/ban").expect("Invalid endpoint");
-
-//             let mut buf = Vec::new();
-//             cb.serialize_with_mode(&mut buf, Compress::No)
-//                 .expect("Serialization failed");
-
-//             bul.client.post(url).body(buf).send()?;
-
-//             return Ok(());
-//         }
-//     }
-
-//     Err(anyhow::anyhow!(
-//         "No matching entry found for timestamp {}",
-//         timestamp
-//     ))
-// }
-
-// pub fn rep(timestamp: u64) -> Result<()> {
-//     // Open file and parse all JSON lines
-//     let file = File::open("server/zkpair_log.jsonl").context("Failed to open JSONL file")?;
-//     let reader = BufReader::new(file);
-
-//     for line in reader.lines() {
-//         let line = line?;
-//         let json: Value = serde_json::from_str(&line)?;
-
-//         if json.get("timestamp").and_then(|t| t.as_u64()) == Some(timestamp) {
-//             // Extract the callback commitment
-//             let cb_str = json
-//                 .get("cb")
-//                 .and_then(|v| v.as_str())
-//                 .context("Missing or invalid `cb` field")?;
-
-//             let cb_bytes = Vec::from_hex(cb_str)?;
-//             let cb: CallbackCom<Fr, Fr, PlainTikCrypto<Fr>> =
-//                 CanonicalDeserialize::deserialize_compressed(&cb_bytes[..])?;
-
-//             // Send rep
-//             let bul = BulNet::new(Url::parse("http://127.0.0.1:3000").unwrap());
-//             let url = bul.api.join("api/reputation").expect("Invalid endpoint");
-
-//             let mut buf = Vec::new();
-//             cb.serialize_with_mode(&mut buf, Compress::No)
-//                 .expect("Serialization failed");
-
-//             bul.client.post(url).body(buf).send()?;
-//             return Ok(());
-//         }
-//     }
-
-//     Err(anyhow::anyhow!(
-//         "No matching entry found for timestamp {}",
-//         timestamp
-//     ))
-// }
-
 pub fn send_callback_to_endpoint(timestamp: u64, endpoint: &str) -> Result<()> {
     let bul = BulNet::new(Url::parse("http://127.0.0.1:3000").unwrap());
 
@@ -314,6 +235,11 @@ pub fn prf(sk: &F, ctx: &F) -> F {
     Poseidon::<2>::hash(&[*sk, *ctx])
 }
 
+pub fn prf2(ctx: &F, i: &F) -> F {
+    let user = load_struct().unwrap();
+    Poseidon::<2>::hash(&[user.data.sk, *ctx, *i])
+}
+
 pub fn compute_pseudo_for_poll(context: &F) -> F {
     let user = load_struct().unwrap();
     prf(&user.data.sk, context)
@@ -348,42 +274,20 @@ pub fn pseudo_proof_with_msg(claimed: F, context: F) -> Result<Vec<u8>, Synthesi
     let bul = BulNet::new(Url::parse("http://127.0.0.1:3000").unwrap());
     let mut rng = OsRng;
 
-    let pk_standard = get_standard_proving_key();
-
-    // Get signature and key for arbitrary predicate proof
-    let commit = user.commit::<Poseidon<2>>();
-    let (pubkey, sig) = bul.get_membership_data(commit).unwrap();
-    let pk_arb_pred = get_arbitrary_pred_pk();
+    let pk_standard = get_standard_pseudo_proving_key();
 
     let pseudo = PseudonymArgs { context, claimed };
     println!("[USER] Generating pseudonym proof with {:?}", pseudo);
 
-    let proof = user.prove_statement_and_in::<
-        Poseidon<2>,
-        PseudonymArgs<F>,
-        PseudonymArgsVar<F>,
-        (),
-        (),
-        Groth16<E>,
-        GRSchnorrObjStore,
-    >(
-        &mut rng,
-        pseudonym_pred,
-        &pk_arb_pred,
-        (sig, pubkey),
-        true,
-        pseudo.clone(),
-        (),
-    )?;
-
     // Execute standard interaction
-    let exec = exec_standint(
+    let exec = exec_pseudo_standint(
         &mut user,
         &mut rng,
         &bul,
         &pk_standard,
         Time::from(0),
-        F::from(0),
+        // F::from(0),
+        pseudo,
         (),
     )
     .unwrap();
@@ -394,10 +298,56 @@ pub fn pseudo_proof_with_msg(claimed: F, context: F) -> Result<Vec<u8>, Synthesi
     let mut payload = vec![];
     exec.serialize_with_mode(&mut payload, Compress::No)
         .unwrap();
-    proof
+    vec![context, claimed]
         .serialize_with_mode(&mut payload, Compress::No)
         .unwrap();
-    vec![context, claimed]
+
+    let _ = save_struct(&user);
+    println!("{:?}", user);
+    Ok(payload)
+}
+
+use common::zk::exec_pseudo_rate_standint;
+use common::zk::PseudonymArgsRate;
+
+pub fn rate_pseudo_proof_with_msg(claimed: F, context: F, i: F) -> Result<Vec<u8>, SynthesisError> {
+    println!("[USER] Interacting (proving)...");
+
+    let mut user: User<F, MsgUser> = load_struct().unwrap();
+    let bul = BulNet::new(Url::parse("http://127.0.0.1:3000").unwrap());
+    let mut rng = OsRng;
+
+    let pk_standard = get_standard_pseudor_proving_key();
+
+    let pseudo = PseudonymArgsRate {
+        context,
+        claimed,
+        i,
+    };
+    println!("[USER] Generating pseudonym proof with {:?}", pseudo);
+
+    // Execute standard interaction
+    let exec = exec_pseudo_rate_standint(
+        &mut user,
+        &mut rng,
+        &bul,
+        &pk_standard,
+        Time::from(0),
+        pseudo,
+        (),
+    )
+    .unwrap();
+
+    println!("[USER] Executed interaction");
+
+    // Serialize all three components: exec, proof, pub_inputs
+    let mut payload = vec![];
+    exec.serialize_with_mode(&mut payload, Compress::No)
+        .unwrap();
+    // proof
+    //     .serialize_with_mode(&mut payload, Compress::No)
+    //     .unwrap();
+    vec![context, claimed, i]
         .serialize_with_mode(&mut payload, Compress::No)
         .unwrap();
 
@@ -659,6 +609,44 @@ pub fn get_standard_proving_key() -> ProvingKey<E> {
         .expect("failed to deserialize proving key")
 }
 
+pub fn get_standard_pseudo_proving_key() -> ProvingKey<E> {
+    let bul = BulNet::new(Url::parse("http://127.0.0.1:3000").unwrap());
+    let url = bul
+        .api
+        .join("api/interaction/standard/pseudo/proving_key")
+        .unwrap();
+
+    let bytes = bul
+        .client
+        .get(url)
+        .send()
+        .expect("failed to send request")
+        .bytes()
+        .expect("failed to get response bytes");
+
+    ProvingKey::<E>::deserialize_with_mode(&*bytes, Compress::No, Validate::No)
+        .expect("failed to deserialize proving key")
+}
+
+pub fn get_standard_pseudor_proving_key() -> ProvingKey<E> {
+    let bul = BulNet::new(Url::parse("http://127.0.0.1:3000").unwrap());
+    let url = bul
+        .api
+        .join("api/interaction/standard/pseudor/proving_key")
+        .unwrap();
+
+    let bytes = bul
+        .client
+        .get(url)
+        .send()
+        .expect("failed to send request")
+        .bytes()
+        .expect("failed to get response bytes");
+
+    ProvingKey::<E>::deserialize_with_mode(&*bytes, Compress::No, Validate::No)
+        .expect("failed to deserialize proving key")
+}
+
 pub fn get_scanning_proving_key() -> ProvingKey<E> {
     let bul = BulNet::new(Url::parse("http://127.0.0.1:3000").unwrap());
     let url = bul.api.join("api/interaction/scan/proving_key").unwrap();
@@ -727,4 +715,28 @@ pub fn get_arbitrary_pred_pk3() -> ProvingKey<E> {
 
     ProvingKey::<E>::deserialize_with_mode(&*bytes, Compress::No, Validate::No)
         .expect("failed to deserialize proving key")
+}
+
+#[derive(Deserialize)]
+struct ContextJson {
+    thread: String,
+    context: String,
+}
+
+pub fn lookup_context(thread: &str) -> Option<F> {
+    let file = File::open("client/contexts.jsonl").ok()?;
+    let reader = BufReader::new(file);
+
+    for line in reader.lines() {
+        if let Ok(line) = line {
+            if let Ok(entry) = serde_json::from_str::<ContextJson>(&line) {
+                if entry.thread == thread {
+                    let bigint = BigInteger256::from_str(&entry.context).ok()?;
+                    return F::from_bigint(bigint);
+                }
+            }
+        }
+    }
+
+    None
 }

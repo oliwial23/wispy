@@ -16,21 +16,27 @@ use common::{
 };
 
 use ark_groth16::Groth16;
+use common::zk::get_standard_pseudo_interaction;
+use common::zk::get_standard_pseudo_rate_interaction;
 use common::zk::pseudonym_pred;
 use common::zk::MsgUser;
 use common::zk::PseudonymArgs;
+use common::zk::PseudonymArgsRate;
 use common::zk::PseudonymArgsVar;
 use common::E;
 use server::{
     forward_authorship, forward_badges, forward_ban_poll, forward_callback, forward_context_ts,
-    forward_jsonrpc, forward_jsonrpc_pseudo, forward_poll, forward_reaction, forward_reply,
-    forward_reply_pseudo, forward_vote, forward_vote_count, handle_get_arbitrary_pred_proving_key,
+    forward_jsonrpc, forward_jsonrpc_pseudo, forward_jsonrpc_pseudo_rate, forward_poll,
+    forward_reaction, forward_reply, forward_reply_pseudo, forward_vote, forward_vote_count,
+    handle_get_all_contexts, handle_get_arbitrary_pred_proving_key,
     handle_get_arbitrary_pred_proving_key2, handle_get_arbitrary_pred_proving_key3,
     handle_get_callback_bulletin, handle_get_callback_nmemb_bulletin, handle_get_membership_pubkey,
     handle_get_nonmembership_pubkey, handle_get_posts_scan, handle_get_posts_standard,
-    handle_get_scan_proving_key, handle_get_standard_proving_key, handle_get_user_bulletin,
-    handle_get_user_pubkey, handle_send_ban_request, handle_send_rep_request, handle_user_join,
-    handle_verify_arb_pred, pseudonym,
+    handle_get_scan_proving_key, handle_get_standard_proving_key,
+    handle_get_standard_pseudo_proving_key, handle_get_standard_pseudor_proving_key,
+    handle_get_user_bulletin, handle_get_user_pubkey, handle_post_context_and_store,
+    handle_send_ban_request, handle_send_rep_request, handle_user_join, handle_verify_arb_pred,
+    pseudonym,
 };
 use std::{fs::File, net::SocketAddr, sync::Arc};
 use tokio::{signal, sync::RwLock};
@@ -52,6 +58,10 @@ pub struct ServerKeys {
     pub authorship_pred_verifying_key: VK,
     pub badge_pred_proving_key: PK,
     pub badge_pred_verifying_key: VK,
+    pub standard_pseudo_proving_key: PK,
+    pub standard_pseudo_verifying_key: VK,
+    pub standard_pseudor_proving_key: PK,
+    pub standard_pseudor_verifying_key: VK,
 }
 
 use common::zk::PseudonymArgsPair;
@@ -96,6 +106,36 @@ async fn main() -> Result<()> {
             false,
         );
 
+    let context = F::from(1234);
+    let claimed = F::from(5678);
+
+    let pseudo = PseudonymArgs { context, claimed };
+
+    let standard_pseudo_interaction = get_standard_pseudo_interaction();
+    let (standard_pseudo_proving_key, standard_pseudo_verifying_key) = standard_pseudo_interaction
+        .generate_keys::<H, Snark, Cr, OStore>(
+        &mut rng,
+        Some(db.obj_bul.get_pubkey()),
+        Some(pseudo.clone()),
+        false,
+    );
+
+    let i = F::from(1);
+    let pseudor = PseudonymArgsRate {
+        context,
+        claimed,
+        i,
+    };
+
+    let standard_pseudo_rate_interaction = get_standard_pseudo_rate_interaction();
+    let (standard_pseudor_proving_key, standard_pseudor_verifying_key) =
+        standard_pseudo_rate_interaction.generate_keys::<H, Snark, Cr, OStore>(
+            &mut rng,
+            Some(db.obj_bul.get_pubkey()),
+            Some(pseudor.clone()),
+            false,
+        );
+
     // Scan interaction keys
     let scan_interaction = get_scan_interaction();
     let (scan_proving_key, scan_verifying_key) = scan_interaction
@@ -110,11 +150,6 @@ async fn main() -> Result<()> {
             )),
             true,
         );
-
-    let context = F::from(1234);
-    let claimed = F::from(5678);
-
-    let pseudo = PseudonymArgs { context, claimed };
 
     let (pseudonym_pred_proving_key, pseudonym_pred_verifying_key) = generate_keys_for_statement_in::<
         F,
@@ -197,6 +232,10 @@ async fn main() -> Result<()> {
         authorship_pred_verifying_key,
         badge_pred_proving_key,
         badge_pred_verifying_key,
+        standard_pseudo_proving_key,
+        standard_pseudo_verifying_key,
+        standard_pseudor_proving_key,
+        standard_pseudor_verifying_key,
     };
 
     info!("Writing keys to file...");
@@ -220,6 +259,14 @@ async fn main() -> Result<()> {
         .route(
             "/api/interaction/standard/proving_key",
             get(handle_get_standard_proving_key),
+        )
+        .route(
+            "/api/interaction/standard/pseudo/proving_key",
+            get(handle_get_standard_pseudo_proving_key),
+        )
+        .route(
+            "/api/interaction/standard/pseudor/proving_key",
+            get(handle_get_standard_pseudor_proving_key),
         )
         .route(
             "/api/interaction/scan/proving_key",
@@ -259,6 +306,10 @@ async fn main() -> Result<()> {
         // .route("/api/interact/pseudo", post(handle_verify_pseudo))
         .route("/api/jsonrpc", post(forward_jsonrpc))
         .route("/api/jsonrpc/pseudo", post(forward_jsonrpc_pseudo))
+        .route(
+            "/api/jsonrpc/pseudo/rate",
+            post(forward_jsonrpc_pseudo_rate),
+        )
         .route("/api/ban", post(handle_send_ban_request))
         .route("/api/pseudonym", get(pseudonym))
         .route("/api/reputation", post(handle_send_rep_request))
@@ -273,6 +324,15 @@ async fn main() -> Result<()> {
         .route("/api/context", post(forward_context_ts))
         .route("/api/badges", post(forward_badges))
         .route("/api/cb", post(forward_callback))
+        // .route(
+        //     "/api/pseudo/get_context",
+        //     post(handle_get_context_by_thread),
+        // )
+        .route(
+            "/api/pseudo/new_thread_context",
+            post(handle_post_context_and_store),
+        )
+        .route("/api/pseudo/get_all_contexts", get(handle_get_all_contexts))
         .with_state(state);
 
     span.exit();
