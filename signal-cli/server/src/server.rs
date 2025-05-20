@@ -157,14 +157,22 @@ struct TimingEntry {
     label: String,
     start_time: String,
     end_time: String,
+    duration_seconds: f64,
 }
 
 
-pub fn write_timing(label: &str, start: DateTime<Utc>, end: DateTime<Utc>, file_path: &str) -> std::io::Result<()> {
+pub fn write_timing(
+    label: &str,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    file_path: &str,
+) -> std::io::Result<()> {
+    let duration = end.signed_duration_since(start);
     let entry = TimingEntry {
         label: label.to_string(),
         start_time: start.to_rfc3339(),
         end_time: end.to_rfc3339(),
+        duration_seconds: duration.num_milliseconds() as f64 / 1000.0,
     };
 
     let mut entries: Vec<TimingEntry> = if let Ok(file) = File::open(file_path) {
