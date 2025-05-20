@@ -3,9 +3,26 @@ import json
 import subprocess
 from datetime import datetime
 
+'''
+Running Experiments:
+1. Setup as normal
+2. In signal-cli run 'python script.py'
+3. Run code in experiment_analysis.ipynb to get average duration
+
+Code is appended into json_files/[insert experiment # here]/*.json
+If one of your experiment runs fails or aborts: you may want to delete the extra entries in the .json file. 
+I could not figure out a naming convention that got around this. 
+
+Experiment Number:
+1. client-side proof gen
+2. server-side proof verification
+3. server-side latency
+
+'''
+
 SCAN_COMMAND = ["cargo", "run", "--bin", "client", "scan"]
 OUTPUT_FILE = "timing_log.json"
-NUM_ITERATIONS = 2
+NUM_ITERATIONS = 100
 GROUP_ID = "VON5o2iTrMfkbvxB/ynpTJjU8TvAQd0Dq6oGG6PzCXc="
 
 def run_command(command):
