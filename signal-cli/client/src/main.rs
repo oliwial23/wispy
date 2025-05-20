@@ -7,7 +7,12 @@ use ark_ff::PrimeField;
 use ark_std::result::Result::Ok;
 use clap::Parser;
 
+use std::fs::{OpenOptions};
+use std::time::{Duration, Instant};
+use chrono::Utc;
+
 use client::helpers::compute_pseudo_for_poll;
+use client::helpers::write_timing;
 use client::helpers::gen_pseudo;
 use client::helpers::get_claimed_context_by_index;
 use client::helpers::list_all_pseudos_from_log;
@@ -136,11 +141,12 @@ async fn main() {
             println!("Fetching posts...");
             // Call view logic here
         }
-
+        
         // signal-cli-client -a +491724953171 --json-rpc-http "http://127.0.0.1:3000/api/jsonrpc" send -g VON5o2iTrMfkbvxB/ynpTJjU8TvAQd0Dq6oGG6PzCXc= -m 'Hello Rachel2'
-        Command::Post { message, group_id } => {
+        Command::Post { message, group_id } => {      
             println!("Posting to group {}: {}", group_id, message);
 
+            // let start_time = Instant::now();
             match spawn_blocking(|| gen_cb_for_msg()).await {
                 Ok(Ok(proof_bytes)) => {
                     // Optional: base64 encode if needed
@@ -151,14 +157,19 @@ async fn main() {
                         group_id,
                         proof: proof_bytes, // add this to your input struct
                     };
-
+                    // Start timing here (3)
                     let res = client
                         .post("http://127.0.0.1:3000/api/jsonrpc")
                         .json(&payload)
                         .send()
                         .await
                         .unwrap();
-
+                    // End time here but for now
+                    // let duration = start_time.elapsed();
+                    // println!("Writing timing to file...");
+                    // if let Err(e) = write_timing("gen_cb_for_msg", duration, "client/timing_server_latency.json") {
+                    //     eprintln!("Failed to write timing log: {}", e);
+                    // }
                     println!("Server responded: {}", res.text().await.unwrap());
                 }
                 Ok(Err(e)) => {

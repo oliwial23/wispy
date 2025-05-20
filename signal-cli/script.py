@@ -5,7 +5,7 @@ from datetime import datetime
 
 SCAN_COMMAND = ["cargo", "run", "--bin", "client", "scan"]
 OUTPUT_FILE = "timing_log.json"
-NUM_ITERATIONS = 100
+NUM_ITERATIONS = 10
 GROUP_ID = "VON5o2iTrMfkbvxB/ynpTJjU8TvAQd0Dq6oGG6PzCXc="
 
 def run_command(command):

@@ -165,8 +165,9 @@ pub fn write_timing(label: &str, duration: Duration, file_path: &str) -> std::io
 }
 
 pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
-    let start_time = Instant::now();
+    
     println!("[USER] Interacting (proving)...");
+
 
     let bul = BulNet::new(Url::parse("http://127.0.0.1:3000").unwrap());
     let mut rng = OsRng;
@@ -177,7 +178,8 @@ pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
 
     let mut pub_inputs = vec![];
     pub_inputs.extend::<Vec<F>>(().to_field_elements().unwrap());
-
+    // Start (1)
+    let start_time = Instant::now();
     let exec = exec_standint(
         &mut user,
         &mut rng,
@@ -188,6 +190,8 @@ pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
         (),
     )
     .unwrap();
+    // End (1)
+    let duration = start_time.elapsed();
 
     println!("[USER] Executed interaction! New user: {:?} \n", user);
 
@@ -200,7 +204,7 @@ pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
     let _ = save_struct(&user);
     println!("{:?}", user);
 
-    let duration = start_time.elapsed();
+    
     println!("Writing timing to file...");
     if let Err(e) = write_timing("gen_cb_for_msg", duration, "client/timing_gen_cb_for_msg.json") {
         eprintln!("Failed to write timing log: {}", e);

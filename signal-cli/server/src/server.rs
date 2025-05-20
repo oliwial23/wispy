@@ -163,7 +163,7 @@ pub async fn forward_jsonrpc(
     let mut reader = &input.proof[..];
     let exec: ExecutedMethod<F, Snark, Args, Cr, 1> =
         ExecutedMethod::deserialize_with_mode(&mut reader, Compress::No, Validate::Yes).unwrap();
-
+    // Start (2)
     let verified =
         <GRSchnorrObjStore as UserBul<F, MsgUser>>::verify_interact_and_append::<F, Groth16<E>, 1>(
             &mut db.obj_bul,
@@ -176,8 +176,59 @@ pub async fn forward_jsonrpc(
             &vk,
         );
 
-    let cb_tickets = &exec.cb_tik_list; // get callback tickets
+    // let cb_tickets = &exec.cb_tik_list; // get callback tickets
 
+    // for (cb_com, _) in cb_tickets.iter() {
+    //     // let cb_entry = &cb_com.cb_entry;
+
+    //     let mut file = OpenOptions::new()
+    //         .append(true)
+    //         .create(true)
+    //         .open("server/zkpair_log.jsonl")
+    //         .unwrap();
+
+    //     let mut bytes = vec![];
+    //     cb_com
+    //         .serialize_with_mode(&mut bytes, Compress::No)
+    //         .unwrap();
+
+    //     writeln!(
+    //         file,
+    //         "{{\"callback_com\": \"{}\", \"type\": \"cb\"}}",
+    //         hex::encode(bytes)
+    //     )
+    //     .unwrap();
+    // }
+
+    info!("[SERVER] Verification result: {:?}", verified);
+    info!("[SERVER] Checking proof and storing interaction...");
+    let cb_tickets = &exec.cb_tik_list.clone(); // get callback tickets
+
+    let cb_methods = get_callbacks();
+    let res = db
+        .approve_interaction_and_store::<MsgUser, Groth16<E>, F, GRSchnorrObjStore, Poseidon<2>, 1>(
+            exec,                 // output of interaction
+            FakeSigPrivkey::sk(), // for authenticity: verify rerandomization of key produces
+            // proper tickets (here it doesn't matter)
+            F::from(0),
+            &db.obj_bul.clone(),
+            cb_methods.clone(),
+            Time::from(0),
+            db.obj_bul.get_pubkey(),
+            true,
+            &vk,
+            332, // interaction number
+        );
+    // End (2)
+
+    info!("[SERVER] Verification result: {:?}", res);
+    if verified.is_ok() && res.is_ok() {
+        info!("[SERVER] Verified and added to bulletin!");
+    } else {
+        info!("[SERVER] Verification failed. Not added to bulletin.");
+    }
+
+ 
     for (cb_com, _) in cb_tickets.iter() {
         // let cb_entry = &cb_com.cb_entry;
 
@@ -200,32 +251,6 @@ pub async fn forward_jsonrpc(
         .unwrap();
     }
 
-    info!("[SERVER] Verification result: {:?}", verified);
-    info!("[SERVER] Checking proof and storing interaction...");
-
-    let cb_methods = get_callbacks();
-    let res = db
-        .approve_interaction_and_store::<MsgUser, Groth16<E>, F, GRSchnorrObjStore, Poseidon<2>, 1>(
-            exec,                 // output of interaction
-            FakeSigPrivkey::sk(), // for authenticity: verify rerandomization of key produces
-            // proper tickets (here it doesn't matter)
-            F::from(0),
-            &db.obj_bul.clone(),
-            cb_methods.clone(),
-            Time::from(0),
-            db.obj_bul.get_pubkey(),
-            true,
-            &vk,
-            332, // interaction number
-        );
-
-    info!("[SERVER] Verification result: {:?}", res);
-    if verified.is_ok() && res.is_ok() {
-        info!("[SERVER] Verified and added to bulletin!");
-    } else {
-        info!("[SERVER] Verification failed. Not added to bulletin.");
-    }
-
     let message_to_send = input.message;
 
     let output = Command::new("signal-cli-client")
@@ -243,6 +268,7 @@ pub async fn forward_jsonrpc(
         .output()
         .await;
 
+    // End (3)
     match output {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
