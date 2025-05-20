@@ -13,6 +13,7 @@ use chrono::Utc;
 
 use client::helpers::compute_pseudo_for_poll;
 use client::helpers::write_timing;
+use client::helpers::save_start_time;
 use client::helpers::gen_pseudo;
 use client::helpers::get_claimed_context_by_index;
 use client::helpers::list_all_pseudos_from_log;
@@ -157,19 +158,20 @@ async fn main() {
                         group_id,
                         proof: proof_bytes, // add this to your input struct
                     };
-                    // Start timing here (3)
+                    // Start (3)
+                    let start_time = Utc::now();
+                    if let Err(e) = save_start_time("3", start_time) {
+                        eprintln!("Failed to save start time: {}", e);
+                    }
+
+
                     let res = client
                         .post("http://127.0.0.1:3000/api/jsonrpc")
                         .json(&payload)
                         .send()
                         .await
                         .unwrap();
-                    // End time here but for now
-                    // let duration = start_time.elapsed();
-                    // println!("Writing timing to file...");
-                    // if let Err(e) = write_timing("gen_cb_for_msg", duration, "client/timing_server_latency.json") {
-                    //     eprintln!("Failed to write timing log: {}", e);
-                    // }
+
                     println!("Server responded: {}", res.text().await.unwrap());
                 }
                 Ok(Err(e)) => {

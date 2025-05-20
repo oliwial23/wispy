@@ -1,7 +1,8 @@
 use crate::bul::BulNet;
 use std::fs::{OpenOptions};
 use std::time::{Duration, Instant};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use std::path::PathBuf;
 use anyhow::Result;
 use ark_bn254::Fr;
 use ark_ff::{BigInteger, BigInteger256, PrimeField, ToConstraintField};
@@ -129,19 +130,19 @@ pub fn join2() -> Result<()> {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct TimingEntry {
-    timestamp: String,
     label: String,
-    duration_seconds: f64,
+    start_time: String,
+    end_time: String,
 }
 
-pub fn write_timing(label: &str, duration: Duration, file_path: &str) -> std::io::Result<()> {
+
+pub fn write_timing(label: &str, start: DateTime<Utc>, end: DateTime<Utc>, file_path: &str) -> std::io::Result<()> {
     let entry = TimingEntry {
-        timestamp: Utc::now().to_rfc3339(),
         label: label.to_string(),
-        duration_seconds: duration.as_secs_f64(),
+        start_time: start.to_rfc3339(),
+        end_time: end.to_rfc3339(),
     };
 
-    // Read existing entries, or start fresh
     let mut entries: Vec<TimingEntry> = if let Ok(file) = File::open(file_path) {
         let reader = BufReader::new(file);
         serde_json::from_reader(reader).unwrap_or_default()
@@ -149,10 +150,8 @@ pub fn write_timing(label: &str, duration: Duration, file_path: &str) -> std::io
         Vec::new()
     };
 
-    // Append new entry
     entries.push(entry);
 
-    // Write all entries back
     let file = OpenOptions::new()
         .create(true)
         .write(true)
@@ -161,6 +160,22 @@ pub fn write_timing(label: &str, duration: Duration, file_path: &str) -> std::io
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &entries)?;
 
+    Ok(())
+}
+
+
+pub fn generate_timestamped_path(base_path: &str) -> PathBuf {
+    let now = Utc::now();
+    let timestamp = now.format("%m-%dT").to_string(); // Safe for filenames
+    let full_path = format!("{}_{}.json", base_path, timestamp);
+    PathBuf::from(full_path)
+}
+
+pub fn save_start_time(label: &str, start_time: DateTime<Utc>) -> std::io::Result<()> {
+    fs::create_dir_all("client/timing_tmp")?;
+    let path = format!("client/timing_tmp/{}.start", label);
+    let mut file = File::create(path)?;
+    write!(file, "{}", start_time.to_rfc3339())?;
     Ok(())
 }
 
@@ -179,7 +194,7 @@ pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
     let mut pub_inputs = vec![];
     pub_inputs.extend::<Vec<F>>(().to_field_elements().unwrap());
     // Start (1)
-    let start_time = Instant::now();
+    // let start_time = Utc::now();
     let exec = exec_standint(
         &mut user,
         &mut rng,
@@ -190,8 +205,13 @@ pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
         (),
     )
     .unwrap();
-    // End (1)
-    let duration = start_time.elapsed();
+    // End(1)
+    // let end_time = Utc::now();
+    // println!("Writing timing to file...");
+    // let timing_path = generate_timestamped_path("client/json_files/1/timing_1");
+    // if let Err(e) = write_timing("1", start_time, end_time, timing_path.to_str().unwrap()) {   
+    //     eprintln!("Failed to write timing log: {}", e);
+    // }
 
     println!("[USER] Executed interaction! New user: {:?} \n", user);
 
@@ -204,11 +224,6 @@ pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
     let _ = save_struct(&user);
     println!("{:?}", user);
 
-    
-    println!("Writing timing to file...");
-    if let Err(e) = write_timing("gen_cb_for_msg", duration, "client/timing_gen_cb_for_msg.json") {
-        eprintln!("Failed to write timing log: {}", e);
-    }
 
     Ok(payload)
 }

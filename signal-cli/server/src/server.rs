@@ -53,6 +53,14 @@ use zk_callbacks::{
         hash::Poseidon,
     },
 };
+use std::time::{Duration, Instant};
+use chrono::{DateTime, Utc};
+use std::path::PathBuf;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, BufWriter}
+};
+use ark_std::fs;
 
 type PubScan = PubScanArgs<F, MsgUser, F, FpVar<F>, Cr, GRSchnorrCallbackStore<F>, 1>;
 type ServerLock = Arc<RwLock<ServerState>>;
@@ -144,6 +152,56 @@ pub struct JsonAuthorship {
     group_id: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct TimingEntry {
+    label: String,
+    start_time: String,
+    end_time: String,
+}
+
+
+pub fn write_timing(label: &str, start: DateTime<Utc>, end: DateTime<Utc>, file_path: &str) -> std::io::Result<()> {
+    let entry = TimingEntry {
+        label: label.to_string(),
+        start_time: start.to_rfc3339(),
+        end_time: end.to_rfc3339(),
+    };
+
+    let mut entries: Vec<TimingEntry> = if let Ok(file) = File::open(file_path) {
+        let reader = BufReader::new(file);
+        serde_json::from_reader(reader).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    entries.push(entry);
+
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(file_path)?;
+    let writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(writer, &entries)?;
+
+    Ok(())
+}
+
+
+fn generate_timestamped_path(base_path: &str) -> PathBuf {
+    let now = Utc::now();
+    let timestamp = now.format("%m-%dT").to_string(); // Safe for filenames
+    let full_path = format!("{}_{}.json", base_path, timestamp);
+    PathBuf::from(full_path)
+}
+
+fn load_start_time(label: &str) -> Result<DateTime<Utc>, Box<dyn std::error::Error>> {
+    let path = format!("client/timing_tmp/{}.start", label);
+    let contents = std::fs::read_to_string(path)?;
+    let parsed = DateTime::parse_from_rfc3339(&contents)?;
+    Ok(parsed.with_timezone(&Utc))
+}
+
 
 #[derive(Deserialize)]
 pub struct JsonBadge {
@@ -164,6 +222,7 @@ pub async fn forward_jsonrpc(
     let exec: ExecutedMethod<F, Snark, Args, Cr, 1> =
         ExecutedMethod::deserialize_with_mode(&mut reader, Compress::No, Validate::Yes).unwrap();
     // Start (2)
+    let start_time = Utc::now();
     let verified =
         <GRSchnorrObjStore as UserBul<F, MsgUser>>::verify_interact_and_append::<F, Groth16<E>, 1>(
             &mut db.obj_bul,
@@ -176,29 +235,6 @@ pub async fn forward_jsonrpc(
             &vk,
         );
 
-    // let cb_tickets = &exec.cb_tik_list; // get callback tickets
-
-    // for (cb_com, _) in cb_tickets.iter() {
-    //     // let cb_entry = &cb_com.cb_entry;
-
-    //     let mut file = OpenOptions::new()
-    //         .append(true)
-    //         .create(true)
-    //         .open("server/zkpair_log.jsonl")
-    //         .unwrap();
-
-    //     let mut bytes = vec![];
-    //     cb_com
-    //         .serialize_with_mode(&mut bytes, Compress::No)
-    //         .unwrap();
-
-    //     writeln!(
-    //         file,
-    //         "{{\"callback_com\": \"{}\", \"type\": \"cb\"}}",
-    //         hex::encode(bytes)
-    //     )
-    //     .unwrap();
-    // }
 
     info!("[SERVER] Verification result: {:?}", verified);
     info!("[SERVER] Checking proof and storing interaction...");
@@ -219,7 +255,14 @@ pub async fn forward_jsonrpc(
             &vk,
             332, // interaction number
         );
+
     // End (2)
+    // let end_time = Utc::now();
+    // println!("Writing timing to file...");
+    // let timing_path = generate_timestamped_path("server/json_files/2/timing_2");
+    // if let Err(e) = write_timing("2", start_time, end_time, timing_path.to_str().unwrap()) {   
+    //     eprintln!("Failed to write timing log: {}", e);
+    // }
 
     info!("[SERVER] Verification result: {:?}", res);
     if verified.is_ok() && res.is_ok() {
@@ -269,6 +312,24 @@ pub async fn forward_jsonrpc(
         .await;
 
     // End (3)
+    let end_time = Utc::now();
+    println!("Writing timing to file...");
+    let end_time = Utc::now();
+    let start_time = match load_start_time("3") {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Failed to load start time: {}", e);
+            return;
+        }
+    };
+    
+
+    let timing_path = generate_timestamped_path("server/json_files/3/timing_3");
+    if let Err(e) = write_timing("3", start_time, end_time, timing_path.to_str().unwrap()) {   
+        eprintln!("Failed to write timing log: {}", e);
+    }
+
+
     match output {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -333,12 +394,12 @@ pub async fn forward_jsonrpc(
             let stderr = String::from_utf8_lossy(&output.stderr);
 
             if output.status.success() {
-                format!("Sent successfully: {}", stdout)
+                println!("Sent successfully: {}", stdout)
             } else {
-                format!("Error sending: {}", stderr)
+                println!("Error sending: {}", stderr)
             }
         }
-        Err(e) => format!("Failed to spawn process: {:?}", e),
+        Err(e) => println!("Failed to spawn process: {:?}", e),
     }
 }
 
@@ -2395,8 +2456,8 @@ pub async fn handle_post_context_and_store(
     Ok(Bytes::from(json_line))
 }
 
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+// use std::fs::File;
+// use std::io::{BufRead, BufReader};
 
 // #[tracing::instrument(skip_all)]
 // pub async fn handle_get_context_by_thread(
