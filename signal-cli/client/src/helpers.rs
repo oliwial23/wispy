@@ -215,7 +215,7 @@ pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
     // End(1)
     // let end_time = Utc::now();
     // println!("Writing timing to file...");
-    // let timing_path = generate_timestamped_path("client/json_files/1/timing_1");
+    // let timing_path = generate_timestamped_path("json_files/1/timing_1");
     // if let Err(e) = write_timing("1", start_time, end_time, timing_path.to_str().unwrap()) {   
     //     eprintln!("Failed to write timing log: {}", e);
     // }

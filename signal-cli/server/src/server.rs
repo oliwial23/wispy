@@ -267,7 +267,7 @@ pub async fn forward_jsonrpc(
     // End (2)
     // let end_time = Utc::now();
     // println!("Writing timing to file...");
-    // let timing_path = generate_timestamped_path("server/json_files/2/timing_2");
+    // let timing_path = generate_timestamped_path("json_files/2/timing_2");
     // if let Err(e) = write_timing("2", start_time, end_time, timing_path.to_str().unwrap()) {   
     //     eprintln!("Failed to write timing log: {}", e);
     // }
@@ -332,7 +332,7 @@ pub async fn forward_jsonrpc(
     };
     
 
-    let timing_path = generate_timestamped_path("server/json_files/3/timing_3");
+    let timing_path = generate_timestamped_path("json_files/3/timing_3");
     if let Err(e) = write_timing("3", start_time, end_time, timing_path.to_str().unwrap()) {   
         eprintln!("Failed to write timing log: {}", e);
     }
