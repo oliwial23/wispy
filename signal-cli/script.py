@@ -9,7 +9,7 @@ from nbconvert.preprocessors import ExecutePreprocessor
 import shutil
 
 OUTPUT_FILE = "timing_log.json"
-NUM_ITERATIONS = 10
+NUM_ITERATIONS = 100
 GROUP_ID = "VON5o2iTrMfkbvxB/ynpTJjU8TvAQd0Dq6oGG6PzCXc="
 
 # Clear all existing experiment files
