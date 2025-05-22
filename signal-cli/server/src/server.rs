@@ -18,6 +18,7 @@ use axum::{
     http::StatusCode,
     response::{ErrorResponse, IntoResponse, Response},
 };
+use client::helpers::{append_timing_line, load_start_time};
 use common::{
     zk::{arg_ban, arg_rep, get_callbacks, get_extra_pubdata_for_scan2, MsgUser},
     Args, Cr, Snark, E, F,
@@ -53,14 +54,13 @@ use zk_callbacks::{
         hash::Poseidon,
     },
 };
-use std::time::{Duration, Instant};
-use chrono::{DateTime, Utc};
-use std::path::PathBuf;
+use chrono::Utc;
+
 use std::{
     fs::File,
-    io::{BufRead, BufReader, BufWriter}
+    io::{BufRead, BufReader}
 };
-use ark_std::fs;
+
 
 type PubScan = PubScanArgs<F, MsgUser, F, FpVar<F>, Cr, GRSchnorrCallbackStore<F>, 1>;
 type ServerLock = Arc<RwLock<ServerState>>;
@@ -160,57 +160,6 @@ struct TimingEntry {
     duration_seconds: f64,
 }
 
-
-pub fn write_timing(
-    label: &str,
-    start: DateTime<Utc>,
-    end: DateTime<Utc>,
-    file_path: &str,
-) -> std::io::Result<()> {
-    let duration = end.signed_duration_since(start);
-    let entry = TimingEntry {
-        label: label.to_string(),
-        start_time: start.to_rfc3339(),
-        end_time: end.to_rfc3339(),
-        duration_seconds: duration.num_milliseconds() as f64 / 1000.0,
-    };
-
-    let mut entries: Vec<TimingEntry> = if let Ok(file) = File::open(file_path) {
-        let reader = BufReader::new(file);
-        serde_json::from_reader(reader).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-
-    entries.push(entry);
-
-    let file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(file_path)?;
-    let writer = BufWriter::new(file);
-    serde_json::to_writer_pretty(writer, &entries)?;
-
-    Ok(())
-}
-
-
-fn generate_timestamped_path(base_path: &str) -> PathBuf {
-    let now = Utc::now();
-    let timestamp = now.format("%m-%dT").to_string(); // Safe for filenames
-    let full_path = format!("{}_{}.json", base_path, timestamp);
-    PathBuf::from(full_path)
-}
-
-fn load_start_time(label: &str) -> Result<DateTime<Utc>, Box<dyn std::error::Error>> {
-    let path = format!("client/timing_tmp/{}.start", label);
-    let contents = std::fs::read_to_string(path)?;
-    let parsed = DateTime::parse_from_rfc3339(&contents)?;
-    Ok(parsed.with_timezone(&Utc))
-}
-
-
 #[derive(Deserialize)]
 pub struct JsonBadge {
     proof: Vec<u8>,
@@ -230,7 +179,7 @@ pub async fn forward_jsonrpc(
     let exec: ExecutedMethod<F, Snark, Args, Cr, 1> =
         ExecutedMethod::deserialize_with_mode(&mut reader, Compress::No, Validate::Yes).unwrap();
     // Start (2)
-    let start_time = Utc::now();
+    let start_time = Utc::now(); // Start (2)
     let verified =
         <GRSchnorrObjStore as UserBul<F, MsgUser>>::verify_interact_and_append::<F, Groth16<E>, 1>(
             &mut db.obj_bul,
@@ -264,14 +213,12 @@ pub async fn forward_jsonrpc(
             332, // interaction number
         );
 
-    // End (2)
-    // let end_time = Utc::now();
-    // println!("Writing timing to file...");
-    // let timing_path = generate_timestamped_path("json_files/2/timing_2");
-    // if let Err(e) = write_timing("2", start_time, end_time, timing_path.to_str().unwrap()) {   
-    //     eprintln!("Failed to write timing log: {}", e);
-    // }
+    let end_time = Utc::now(); // End (2)
 
+    if let Err(e) = append_timing_line("2", start_time, end_time) {
+        eprintln!("❌ Failed to write timing file for proof gen: {}", e);
+    }
+    
     info!("[SERVER] Verification result: {:?}", res);
     if verified.is_ok() && res.is_ok() {
         info!("[SERVER] Verified and added to bulletin!");
@@ -320,23 +267,19 @@ pub async fn forward_jsonrpc(
         .await;
 
     // End (3)
-    let end_time = Utc::now();
-    println!("Writing timing to file...");
-    let end_time = Utc::now();
+    let end_time = Utc::now(); // End (3)
+
     let start_time = match load_start_time("3") {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("Failed to load start time: {}", e);
+            eprintln!("Failed to load latency start time: {}", e);
             return;
         }
     };
-    
 
-    let timing_path = generate_timestamped_path("json_files/3/timing_3");
-    if let Err(e) = write_timing("3", start_time, end_time, timing_path.to_str().unwrap()) {   
-        eprintln!("Failed to write timing log: {}", e);
+    if let Err(e) = append_timing_line("3", start_time, end_time) {
+        eprintln!("❌ Failed to write timing file for proof gen: {}", e);
     }
-
 
     match output {
         Ok(output) => {

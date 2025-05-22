@@ -1,29 +1,45 @@
 import time
 import json
 import subprocess
+import os
+import glob
 from datetime import datetime
+import nbformat
+from nbconvert.preprocessors import ExecutePreprocessor
+import shutil
 
-'''
-Running Experiments:
-1. Setup as normal
-2. In signal-cli run 'python script.py'
-3. Run code in experiment_analysis.ipynb to get average duration
-
-Code is appended into json_files/[insert experiment # here]/*.json
-If one of your experiment runs fails or aborts: you may want to delete the extra entries in the .json file. 
-I could not figure out a naming convention that got around this. 
-
-Experiment Number:
-1. client-side proof gen
-2. server-side proof verification
-3. server-side latency
-
-'''
-
-SCAN_COMMAND = ["cargo", "run", "--bin", "client", "scan"]
 OUTPUT_FILE = "timing_log.json"
-NUM_ITERATIONS = 100
+NUM_ITERATIONS = 10
 GROUP_ID = "VON5o2iTrMfkbvxB/ynpTJjU8TvAQd0Dq6oGG6PzCXc="
+
+# Clear all existing experiment files
+def clean_previous_results():
+    folders = ['json_files/1', 'json_files/2', 'json_files/3']
+    for folder in folders:
+        if os.path.exists(folder):
+            for file in os.listdir(folder):
+                file_path = os.path.join(folder, file)
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    print(f"❌ Failed to delete {file_path}: {e}")
+        else:
+            os.makedirs(folder, exist_ok=True)
+
+    # Optional: clear overall experiment log
+    if os.path.exists(OUTPUT_FILE):
+        try:
+            os.remove(OUTPUT_FILE)
+        except Exception as e:
+            print(f"❌ Failed to delete {OUTPUT_FILE}: {e}")
+
+    print("🧹 Cleaned all previous timing files.")
+
+# Run cleanup first
+clean_previous_results()
+
+for subdir in ['json_files/1', 'json_files/2', 'json_files/3']:
+    os.makedirs(subdir, exist_ok=True)
 
 def run_command(command):
     start = time.time()
@@ -44,21 +60,49 @@ def append_log(entry):
     with open(OUTPUT_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-# client join
+def get_timing_log(path):
+    return os.path.exists(os.path.join(path, "timings.jsonl"))
 
-post_command = [
-        "cargo", "run", "--bin", "client", "join"
-    ]
-post_duration, post_success, post_error = run_command(post_command)
+def assert_all_timings_written():
+    if not all([
+        get_timing_log("json_files/1"),
+        get_timing_log("json_files/2"),
+        get_timing_log("json_files/3")
+    ]):
+        raise RuntimeError("❌ Missing one or more timing files!")
+    print("✅ All timing files written correctly.")
+
+
+def run_notebook(path):
+    print("📊 Running analysis notebook...")
+    with open(path) as f:
+        nb = nbformat.read(f, as_version=4)
+    ep = ExecutePreprocessor(timeout=600, kernel_name='python3')
+    ep.preprocess(nb, {'metadata': {'path': './'}})
+    print("✅ Notebook executed: experiment_analysis.ipynb")
+
+# 1. Optional join first
+join_command = ["cargo", "run", "--bin", "client", "join"]
+print("🧪 Running join command...")
+run_command(join_command)
+
+# 2. Run post 100 times
 for i in range(1, NUM_ITERATIONS + 1):
     message = f"Message: {i}"
     post_command = [
-        "cargo", "run", "--bin", "client", "post", 
+        "cargo", "run", "--bin", "client", "post",
         "-m", message,
         "-g", GROUP_ID
     ]
 
+    print(f"📨 Iteration {i}: Sending post...")
     post_duration, post_success, post_error = run_command(post_command)
+
+    try:
+        assert_all_timings_written()
+    except RuntimeError as e:
+        print(f"⚠️ Iteration {i} error: {e}")
+
     log_entry = {
         "iteration": i,
         "timestamp": datetime.utcnow().isoformat(),
@@ -70,15 +114,9 @@ for i in range(1, NUM_ITERATIONS + 1):
         }
     }
 
-    # if i % 4 == 0:
-    #     scan_duration, scan_success, scan_error = run_command(SCAN_COMMAND)
-    #     log_entry["scan"] = {
-    #         "duration_seconds": scan_duration,
-    #         "success": scan_success,
-    #         "error": scan_error if not scan_success else None
-    #     }
+    append_log(log_entry)
+    print(f"✅ Iteration {i} complete.")
 
-    #     append_log(log_entry)
-    #     print(f"Iteration {i} complete.")
+# 3. Analyze results
+run_notebook("experiment_analysis.ipynb")
 
-print("All done. Timing info saved to timing_log.json.")

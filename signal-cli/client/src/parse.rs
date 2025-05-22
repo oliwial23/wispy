@@ -188,17 +188,7 @@ pub enum Command {
         #[arg(long = "group-id", short = 'g')]
         group_id: String,
     },
-
-    // ThumbsUp {
-    //     /// Message Timestamp
-    //     #[arg(long = "timestamp", short = 't')]
-    //     t: u64,
-    // },
-    // ThumbsDown {
-    //     /// Message Timestamp
-    //     #[arg(long = "timestamp", short = 't')]
-    //     t: u64,
-    // },
+    
     Authorship {
         /// Send using a pseudonym. Give the index of the pseudonym. For more details, call "pseudo-index"
         #[arg(long = "pseudo-idx1", short = 'i')]

@@ -6,13 +6,8 @@ use ark_ff::BigInteger256;
 use ark_ff::PrimeField;
 use ark_std::result::Result::Ok;
 use clap::Parser;
-
-use std::fs::{OpenOptions};
-use std::time::{Duration, Instant};
 use chrono::Utc;
-
 use client::helpers::compute_pseudo_for_poll;
-use client::helpers::write_timing;
 use client::helpers::save_start_time;
 use client::helpers::gen_pseudo;
 use client::helpers::get_claimed_context_by_index;
@@ -130,7 +125,6 @@ pub struct ContextJson {
 }
 
 use client::helpers::rep;
-// use client::helpers::update_reaction_log;
 
 #[tokio::main]
 async fn main() {
@@ -158,12 +152,11 @@ async fn main() {
                         group_id,
                         proof: proof_bytes, // add this to your input struct
                     };
-                    // Start (3)
-                    let start_time = Utc::now();
+                    let start_time = Utc::now(); // Start (3)
+
                     if let Err(e) = save_start_time("3", start_time) {
                         eprintln!("Failed to save start time: {}", e);
                     }
-
 
                     let res = client
                         .post("http://127.0.0.1:3000/api/jsonrpc")
