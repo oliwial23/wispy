@@ -43,6 +43,7 @@ use zk_callbacks::{
 };
 use std::path::Path;
 use serde_json::json;
+use std::time::Instant;
 
 #[derive(Serialize, Deserialize)]
 pub struct PseudonymProofEntry {
@@ -166,7 +167,7 @@ pub fn append_timing_line(label: &str, start: DateTime<Utc>, end: DateTime<Utc>)
     let line = json!({
         "start": start.to_rfc3339(),
         "end": end.to_rfc3339(),
-        "duration_ms": duration_ms
+        "duration_ms": duration_ms,
     }).to_string();
 
     let dir = format!("json_files/{}", label);
@@ -210,6 +211,7 @@ pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
 
     // End(1)
     let end_time = Utc::now();  // End (1)
+
     if let Err(e) = append_timing_line("1", start_time, end_time) {
         eprintln!("Failed to write timing file for proof gen: {}", e);
     }

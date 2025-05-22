@@ -179,7 +179,7 @@ pub async fn forward_jsonrpc(
     let exec: ExecutedMethod<F, Snark, Args, Cr, 1> =
         ExecutedMethod::deserialize_with_mode(&mut reader, Compress::No, Validate::Yes).unwrap();
     // Start (2)
-    let start_time = Utc::now(); // Start (2)
+    let start_time_2 = Utc::now(); // Start (2)
     let verified =
         <GRSchnorrObjStore as UserBul<F, MsgUser>>::verify_interact_and_append::<F, Groth16<E>, 1>(
             &mut db.obj_bul,
@@ -213,11 +213,8 @@ pub async fn forward_jsonrpc(
             332, // interaction number
         );
 
-    let end_time = Utc::now(); // End (2)
+    let end_time_2 = Utc::now(); // End (2)
 
-    if let Err(e) = append_timing_line("2", start_time, end_time) {
-        eprintln!("❌ Failed to write timing file for proof gen: {}", e);
-    }
     
     info!("[SERVER] Verification result: {:?}", res);
     if verified.is_ok() && res.is_ok() {
@@ -278,6 +275,10 @@ pub async fn forward_jsonrpc(
     };
 
     if let Err(e) = append_timing_line("3", start_time, end_time) {
+        eprintln!("❌ Failed to write timing file for proof gen: {}", e);
+    }
+
+    if let Err(e) = append_timing_line("2", start_time_2, end_time_2) {
         eprintln!("❌ Failed to write timing file for proof gen: {}", e);
     }
 

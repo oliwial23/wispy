@@ -41,6 +41,9 @@ clean_previous_results()
 for subdir in ['json_files/1', 'json_files/2', 'json_files/3']:
     os.makedirs(subdir, exist_ok=True)
 
+with open("json_files/3/start_time.json", "w") as f:
+    f.write('{}')
+
 def run_command(command):
     start = time.time()
     try:

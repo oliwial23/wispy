@@ -152,6 +152,7 @@ async fn main() {
                         group_id,
                         proof: proof_bytes, // add this to your input struct
                     };
+                    
                     let start_time = Utc::now(); // Start (3)
 
                     if let Err(e) = save_start_time("3", start_time) {
