@@ -9,7 +9,7 @@ from nbconvert.preprocessors import ExecutePreprocessor
 import shutil
 
 OUTPUT_FILE = "experiments/timing_log.json"
-NUM_ITERATIONS = 100
+NUM_ITERATIONS = 10
 GROUP_ID = "VON5o2iTrMfkbvxB/ynpTJjU8TvAQd0Dq6oGG6PzCXc="
 THREAD = "experiment"
 
@@ -167,24 +167,45 @@ join_command = ["cargo", "run", "--bin", "client", "join"]
 print("🧪 Running join command...")
 run_command(join_command)
 
-# Generate another pseudonym for authorship check
-print("Generating new pseudonym...")
-run_command(["cargo", "run", "--bin", "client", "gen-pseudo"])
+for k in range(1, NUM_ITERATIONS + 1):
+    iteration_log = {
+        "iteration": k,
+        "timestamp": datetime.utcnow().isoformat(),
+        "actions": {}
+    }
 
-# Generate a new thread context
-new_context_command = [
-    "cargo", "run",  "--bin",  "client", "new-thread-cxt", 
-    "-m",  THREAD
-]
-print("Running new context command...")
-run_command(new_context_command)
+    print(f"📨 Iteration {k}: Sending pseudonym post...")
+    duration, success, error = run_command([
+        "cargo", "run", "--bin", "client", "post-pseudo",
+        "-m", f"Pseudonym Message: {k}",
+        "-g", GROUP_ID,
+        "-i", "1"
+    ])
+    iteration_log["actions"]["pseudonym_post"] = {"duration": duration, "success": success, "error": error if not success else None}
 
-# Get the existing contexts
-get_context_command = [
-    "cargo", "run",  "--bin",  "client", "get-contexts" 
-]
-print("Running get context command...")
-run_command(get_context_command)
+    # Grab the timestamp of message to ban user
+    ts_ban = get_latest_zkpair_timestamp()
+
+    print(f"📨 Iteration {k}: Ban...")
+    duration, success, error = run_command([
+        "cargo", "run", "--bin", "client", "ban",
+        "-t", str(ts_ban)
+    ])
+    iteration_log["actions"]["ban"] = {"duration": duration, "success": success, "error": error if not success else None}
+
+    print(f"📨 Iteration {k}: Scanning 1...")
+    duration, success, error = run_command([
+        "cargo", "run", "--bin", "client", "scan"
+    ])
+    iteration_log["actions"]["scan"] = {"duration": duration, "success": success, "error": error if not success else None}
+
+    join_command = ["cargo", "run", "--bin", "client", "join"]
+    print("🧪 Running join command...")
+    run_command(join_command)
+
+    append_log(iteration_log)
+    print(f"✅ Iteration {k} complete.")
+    wait(4.5) # waiting added for trend graph
 
 
 # 2. Run normal post 100 times with rep
@@ -230,30 +251,35 @@ for j in range(1, NUM_ITERATIONS + 1):
 
     append_log(iteration_log)
     print(f"✅ Iteration {j} complete.")
-    wait(8) # waiting added for trend graph
+    wait(4.5) # waiting added for trend graph
 
+
+# Generate another pseudonym for authorship check
+print("Generating new pseudonym...")
+run_command(["cargo", "run", "--bin", "client", "gen-pseudo"])
+
+# Generate a new thread context
+new_context_command = [
+    "cargo", "run",  "--bin",  "client", "new-thread-cxt", 
+    "-m",  THREAD
+]
+print("Running new context command...")
+run_command(new_context_command)
+
+# Get the existing contexts
+get_context_command = [
+    "cargo", "run",  "--bin",  "client", "get-contexts" 
+]
+print("Running get context command...")
+run_command(get_context_command)
 
 # 3. Run all other experiments 100 times
 for i in range(1, NUM_ITERATIONS + 1):
-
-    print(f"📨 Iteration {i}: Sending pseudonym post...")
-    duration, success, error = run_command([
-        "cargo", "run", "--bin", "client", "post-pseudo",
-        "-m", f"Pseudonym Message: {i}",
-        "-g", GROUP_ID,
-        "-i", "1"
-    ])
-    iteration_log["actions"]["pseudonym_post"] = {"duration": duration, "success": success, "error": error if not success else None}
-
-    # Grab the timestamp of message to ban user
-    ts_ban = get_latest_zkpair_timestamp()
-
-    print(f"📨 Iteration {i}: Ban...")
-    duration, success, error = run_command([
-        "cargo", "run", "--bin", "client", "ban",
-        "-t", str(ts_ban)
-    ])
-    iteration_log["actions"]["ban"] = {"duration": duration, "success": success, "error": error if not success else None}
+    iteration_log = {
+        "iteration": i,
+        "timestamp": datetime.utcnow().isoformat(),
+        "actions": {}
+    }
 
     print(f"📨 Iteration {i}: Sending rate-limited pseudonym post...")
     duration, success, error = run_command([
