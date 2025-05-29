@@ -44,4 +44,5 @@ tracing-subscriber = "0.2.25"
 tracing = "0.1.41"
 petname = "2.0.2"
 chrono = "0.4"
+identicon-rs = "6.0.2"
 

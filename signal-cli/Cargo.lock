@@ -836,6 +836,7 @@ dependencies = [
  "common",
  "futures-util",
  "hex",
+ "identicon-rs",
  "jsonrpc",
  "jsonrpsee",
  "log",
@@ -891,6 +892,8 @@ dependencies = [
  "ark-snark",
  "ark-std",
  "rand",
+ "serde",
+ "serde_json",
  "zk-callbacks",
 ]
 

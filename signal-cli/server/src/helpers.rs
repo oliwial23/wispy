@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
+use ark_std::fs;
 use ark_std::result::Result::Ok;
+use hex::FromHex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -11,9 +13,9 @@ use std::{
 
 #[derive(Serialize, Deserialize, Clone)]
 struct ReputationEntry {
-    timestamp: u64,
-    reputation: i32,
     cb: String,
+    reputation: i32,
+    timestamp: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -51,25 +53,27 @@ pub fn update_reaction_log(new_ts: u64, new_delta: i32) -> std::io::Result<()> {
         }
     }
 
-    // Update the reputation for the timestamp
+    // Update or insert the reputation entry
     entries
         .entry(new_ts)
         .and_modify(|e| {
             e.reputation = (e.reputation + new_delta).max(0); // clamp to zero
         })
         .or_insert_with(|| ReputationEntry {
-            timestamp: new_ts,
+            cb: String::from(""), // You may want to populate this meaningfully
             reputation: new_delta.max(0),
-            cb: String::from(""), // or panic/context if cb required
+            timestamp: new_ts,
+            
         });
 
-    // Rewrite the full file
+    // Sort entries by timestamp
+    let mut sorted_entries: Vec<_> = entries.values().cloned().collect();
+    sorted_entries.sort_by_key(|e| e.timestamp);
+
+    // Rewrite the full file in timestamp order
     let mut file = File::create("server/zkpair_log.jsonl")?;
-    for entry in entries.values() {
-        let line = format!(
-            "{{\"timestamp\": {}, \"reputation\": {}, \"cb\": \"{}\"}}",
-            entry.timestamp, entry.reputation, entry.cb
-        );
+    for entry in sorted_entries {
+        let line = serde_json::to_string(&entry)?;
         writeln!(file, "{}", line)?;
     }
 
@@ -95,28 +99,6 @@ pub fn get_reputation_by_cb(cb_hex: &str) -> Result<i64> {
 
     Err(anyhow::anyhow!("No entry found for cb {}", cb_hex))
 }
-
-// pub fn get_reputation_by_timestamp(timestamp: u64) -> Result<i32> {
-//     let file = File::open("zkpair_log.jsonl").context("Failed to open log file")?;
-//     let reader = BufReader::new(file);
-
-//     for line in reader.lines() {
-//         let line = line?;
-//         let json: Value = serde_json::from_str(&line)?;
-//         if json.get("timestamp").and_then(|v| v.as_u64()) == Some(timestamp) {
-//             return json
-//                 .get("reputation")
-//                 .and_then(|r| r.as_i64())
-//                 .map(|r| r as i32)
-//                 .context("Missing or invalid `reputation` field");
-//         }
-//     }
-
-//     Err(anyhow::anyhow!(
-//         "No entry found for timestamp {}",
-//         timestamp
-//     ))
-// }
 
 pub fn delete_poll_pseudo_entry_by_timestamp(
     timestamp: u64,
@@ -223,7 +205,6 @@ pub fn emoji_to_name(emoji: &str) -> &'static str {
 pub fn count_votes(val: &Value) -> (usize, usize) {
     let empty_vec = vec![];
     let votes = val["votes"].as_array().unwrap_or(&empty_vec);
-    //let votes = val["votes"].as_array().unwrap_or(&vec![]);
     let ban_mode = val["ban"].as_i64().unwrap_or(0) != 0;
 
     let mut count_1 = 0;
@@ -308,8 +289,6 @@ pub fn get_context_from_timestamp(target_ts: i64) -> Option<String> {
     None
 }
 
-use ark_std::fs;
-
 pub fn delete_poll_entry_by_timestamp(target_ts: u64) -> std::io::Result<()> {
     let path = "server/poll_log.jsonl";
 
@@ -343,8 +322,6 @@ pub fn delete_poll_entry_by_timestamp(target_ts: u64) -> std::io::Result<()> {
 
     Ok(())
 }
-
-use hex::FromHex;
 
 pub fn find_callback_by_timestamp(timestamp: u64) -> Result<Vec<u8>> {
     let file = File::open("server/zkpair_log.jsonl").context("Failed to open zkpair_log.jsonl")?;

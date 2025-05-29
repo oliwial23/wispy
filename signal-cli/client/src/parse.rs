@@ -1,9 +1,10 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+/// CLI entry point for the anonymous group chat application.
 #[derive(Parser)]
 pub struct Cli {
-    /// User file
+    /// Path to the user file (optional)
     #[arg(short, long, value_name = "FILE")]
     pub user: Option<PathBuf>,
 
@@ -11,212 +12,225 @@ pub struct Cli {
     pub command: Command,
 }
 
+/// Enum of available CLI commands.
 #[derive(Subcommand)]
 pub enum Command {
-    /// View messages posted.
+    /// View messages that have been posted
     ViewPosts,
 
-    /// Send message + update server with callback.
+    /// Send a message anonymously with a callback
     Post {
-        /// Message to be sent anonymously
-        #[arg(long = "message", short = 'm')]
+        /// Message content
+        #[arg(long, short = 'm')]
         message: String,
 
-        /// Group id for group message
-        #[arg(long = "group-id", short = 'g')]
+        /// Group ID
+        #[arg(long, short = 'g')]
         group_id: String,
     },
 
+    /// Send a message using a pseudonym
     PostPseudo {
-        /// Message to be sent anonymously
-        #[arg(long = "message", short = 'm')]
+        /// Message content
+        #[arg(long, short = 'm')]
         message: String,
 
-        /// Group id for group message
-        #[arg(long = "group-id", short = 'g')]
+        /// Group ID
+        #[arg(long, short = 'g')]
         group_id: String,
 
-        /// Send using a pseudonym. Give the index of the pseudonym. For more details, call "pseudo-index"
+        /// Index of pseudonym to use
         #[arg(long = "pseudo-idx", short = 'i')]
         pseudo_idx: usize,
     },
 
+    /// Send a message with a rate-limited pseudonym
     PostPseudoRate {
-        /// Message to be sent anonymously
-        #[arg(long = "message", short = 'm')]
+        /// Message content
+        #[arg(long, short = 'm')]
         message: String,
 
-        /// Group id for group message
-        #[arg(long = "group-id", short = 'g')]
+        /// Group ID
+        #[arg(long, short = 'g')]
         group_id: String,
 
-        /// Message to be sent anonymously
-        #[arg(long = "thread", short = 't')]
+        /// Thread ID for the rate-limited pseudonym
+        #[arg(long, short = 't')]
         thread: String,
 
-        /// Send using a pseudonym. Give the index of the pseudonym. For more details, call "pseudo-index"
+        /// Index of pseudonym to use
         #[arg(long = "pseudo-idx", short = 'i')]
         pseudo_idx: usize,
     },
 
-    Pseudonym,
+    /// Generate a new pseudonym
     GenPseudo,
+
+    /// Send a scan interaction
     Scan,
-    // PseudoContext,
-    /// Submit vote for a poll
+
+    /// Submit a vote for a poll
     Vote {
-        /// Group id of group message to react to
-        #[arg(long = "group-id", short = 'g')]
+        /// Group ID of the poll message
+        #[arg(long, short = 'g')]
         group_id: String,
 
-        /// Timestamp of message to react to
-        #[arg(long = "timestamp", short = 't')]
+        /// Timestamp of the poll message
+        #[arg(long, short = 't')]
         timestamp: u64,
 
-        /// Reaction emoji (your vote for the poll)
-        #[arg(long = "emoji", short = 'e')]
+        /// Emoji representing your vote
+        #[arg(long, short = 'e')]
         emoji: String,
-        // /// Context provided by server specific to this poll
-        // #[arg(long = "context", short = 'c')]
-        // context: String,
     },
 
+    /// Count votes for a poll or ban poll
     CountVotes {
-        /// Group id of group poll or ban poll message
-        #[arg(long = "group-id", short = 'g')]
+        /// Group ID
+        #[arg(long, short = 'g')]
         group_id: String,
 
-        /// Timestamp of poll or ban poll
-        #[arg(long = "timestamp", short = 't')]
+        /// Timestamp of the poll message
+        #[arg(long, short = 't')]
         timestamp: u64,
     },
 
+    /// Start a ban poll for a message
     BanPoll {
         /// Optional message for the poll
-        #[arg(long = "message", short = 'm')]
+        #[arg(long, short = 'm')]
         message: Option<String>,
 
-        /// Group id for the ban poll
-        #[arg(long = "group-id", short = 'g')]
+        /// Group ID
+        #[arg(long, short = 'g')]
         group_id: String,
 
-        /// Timestamp of message to vote on for banning
-        #[arg(long = "timestamp", short = 't')]
+        /// Timestamp of the message to ban
+        #[arg(long, short = 't')]
         timestamp: u64,
     },
-    // Ban {
-    //     /// Index of CB
-    //     #[arg(long = "i", short = 'i')]
-    //     i: usize,
-    //     /// Which
-    //     #[arg(long = "j", short = 'j')]
-    //     i2: usize,
-    // },
+
+    /// Ban a user given a problematic message
     Ban {
-        /// Message Timestamp
-        #[arg(long = "timestamp", short = 't')]
+        /// Timestamp of the message for banning
+        #[arg(long, short = 't')]
         t: u64,
     },
 
+    /// Count all reputation points for a message
     Rep {
-        /// Message Timestamp
-        #[arg(long = "timestamp", short = 't')]
+        /// Timestamp of the message
+        #[arg(long, short = 't')]
         t: u64,
     },
 
+    /// Join a group (e.g., fetch callback object)
     Join,
 
-    /// Get pseudonym index for choosing pseudonym you wish to send messages under
+    /// Print pseudonym index information
     PseudoIndex,
 
-    /// React to a message
+    /// React to a message with an emoji
     Reaction {
-        /// Group id of group message to react to
-        #[arg(long = "group-id", short = 'g')]
+        /// Group ID
+        #[arg(long, short = 'g')]
         group_id: String,
 
-        /// Reaction emoji
-        #[arg(long = "emoji", short = 'e')]
+        /// Emoji to react with
+        #[arg(long, short = 'e')]
         emoji: String,
 
-        /// Timestamp of message to react to
-        #[arg(long = "timestamp", short = 't')]
+        /// Timestamp of the message to react to
+        #[arg(long, short = 't')]
         timestamp: u64,
     },
 
     /// Reply to a message
     Reply {
-        /// Group id of group message to react to
-        #[arg(long = "group-id", short = 'g')]
+        /// Group ID
+        #[arg(long, short = 'g')]
         group_id: String,
 
-        /// Message to be sent as a reply
-        #[arg(long = "message", short = 'm')]
+        /// Message content
+        #[arg(long, short = 'm')]
         message: String,
 
-        /// Timestamp of message to reply to
-        #[arg(long = "timestamp", short = 't')]
+        /// Timestamp of the message to reply to
+        #[arg(long, short = 't')]
         timestamp: u64,
     },
 
-    /// Reply to a message
+    /// Reply to a message using a pseudonym
     ReplyPseudo {
-        /// Group id of group message to react to
-        #[arg(long = "group-id", short = 'g')]
+        /// Group ID
+        #[arg(long, short = 'g')]
         group_id: String,
 
-        /// Message to be sent as a reply
-        #[arg(long = "message", short = 'm')]
+        /// Message content
+        #[arg(long, short = 'm')]
         message: String,
 
-        /// Timestamp of message to reply to
-        #[arg(long = "timestamp", short = 't')]
+        /// Timestamp of the message to reply to
+        #[arg(long, short = 't')]
         timestamp: u64,
 
-        /// Send using a pseudonym. Give the index of the pseudonym. For more details, call "pseudo-index"
+        /// Index of pseudonym to use
         #[arg(long = "pseudo-idx", short = 'p')]
         pseudo_idx: usize,
     },
 
+    /// Fetch all poll contexts from the server
     GetContexts,
+
+    /// Start a new poll
     Poll {
-        /// Message for poll for group members to vote on
-        #[arg(long = "message", short = 'm')]
+        /// Message content
+        #[arg(long, short = 'm')]
         message: String,
 
-        /// Group id for the poll
-        #[arg(long = "group-id", short = 'g')]
+        /// Group ID
+        #[arg(long, short = 'g')]
         group_id: String,
     },
-    
+
+    /// Claim authorship of a message using two pseudonyms
     Authorship {
-        /// Send using a pseudonym. Give the index of the pseudonym. For more details, call "pseudo-index"
+        /// First pseudonym index
         #[arg(long = "pseudo-idx1", short = 'i')]
         pseudo_idx1: usize,
 
-        /// Send using a pseudonym. Give the index of the pseudonym. For more details, call "pseudo-index"
+        /// Second pseudonym index
         #[arg(long = "pseudo-idx2", short = 'j')]
         pseudo_idx2: usize,
 
-        /// Group id for claim authorship message
-        #[arg(long = "group-id", short = 'g')]
+        /// Group ID
+        #[arg(long, short = 'g')]
         group_id: String,
     },
 
+    /// Claim a badge under a pseudonym
     Badge {
-        #[arg(long = "index", short = 'i')]
+        /// Pseudonym index
+        #[arg(long, short = 'i')]
         i: usize,
 
-        #[arg(long = "badge", short = 'b')]
+        /// Badge string
+        #[arg(long, short = 'b')]
         claimed: String,
+
+        /// Group ID
+        #[arg(long, short = 'g')]
+        group_id: String,
     },
 
+    /// Start a new thread context
     NewThreadCxt {
-        /// Message for poll for group members to vote on
-        #[arg(long = "message", short = 'm')]
+        /// Message for the thread context
+        #[arg(long, short = 'm')]
         message: String,
-        // /// Group id for the poll
-        // #[arg(long = "group-id", short = 'g')]
-        // group_id: String,
     },
+
+    /// Generate a new pseudonym (legacy command, for compatibility)
+    Pseudonym,
 }
+

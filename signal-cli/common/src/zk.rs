@@ -1,24 +1,21 @@
 use ark_bn254::Fr as F;
 use ark_bn254::Fr;
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField, ToConstraintField};
 use ark_ff::fields::AdditiveGroup;
-use ark_r1cs_std::prelude::AllocVar;
-use ark_r1cs_std::prelude::AllocationMode;
-use ark_r1cs_std::select::CondSelectGadget;
 use ark_r1cs_std::{
     boolean::Boolean,
     eq::EqGadget,
-    fields::{FieldVar, fp::FpVar},
+    fields::{fp::FpVar, FieldVar},
+    prelude::{AllocVar, AllocationMode},
+    select::CondSelectGadget,
 };
-use ark_relations::r1cs::Namespace;
-use ark_relations::r1cs::Result as ArkResult;
-use ark_relations::r1cs::SynthesisError;
+use ark_relations::r1cs::{Namespace, Result as ArkResult, SynthesisError};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::vec::Vec;
 use rand::{CryptoRng, RngCore};
 use std::borrow::Borrow;
-use zk_callbacks::crypto::hash::HasherZK;
 use zk_callbacks::{
+    crypto::hash::HasherZK,
     generic::{
         bulletin::{PublicCallbackBul, PublicUserBul},
         interaction::{Callback, Interaction},
@@ -33,14 +30,9 @@ use zk_callbacks::{
     scannable_zk_object,
 };
 
-use crate::Args;
-use crate::ArgsVar;
-use crate::Cr;
-use crate::H;
-use crate::PK;
-use crate::Snark;
+use crate::{Args, ArgsVar, Cr, H, PK, Snark};
 
-pub const NUM_INTS_BEFORE_SCAN: usize = 101;
+pub const NUM_INTS_BEFORE_SCAN: usize = 505;
 pub const MAX_PSEUDO: usize = 4;
 const BAN_FLAG: u64 = 999999999;
 
@@ -68,6 +60,43 @@ pub struct PseudonymArgsVar<F: PrimeField> {
     pub context: FpVar<F>,
     pub claimed: FpVar<F>,
 }
+#[derive(Clone, Debug, Default, CanonicalDeserialize, CanonicalSerialize)]
+pub struct PseudonymArgsRate<F: PrimeField> {
+    pub context: F,
+    pub claimed: F,
+    pub i: F,
+}
+
+#[derive(Clone)]
+pub struct PseudonymArgsRateVar<F: PrimeField> {
+    pub context: FpVar<F>,
+    pub claimed: FpVar<F>,
+    pub i: FpVar<F>,
+}
+
+#[derive(Clone, Debug, Default, CanonicalDeserialize, CanonicalSerialize)]
+pub struct BadgesArgs<F: PrimeField> {
+    pub i: F,
+    pub claimed: F,
+}
+
+#[derive(Clone)]
+pub struct BadgesArgsVar<F: PrimeField> {
+    pub i: FpVar<F>,
+    pub claimed: FpVar<F>,
+}
+
+#[derive(Clone, Default)]
+pub struct PseudonymArgsPair<F: PrimeField> {
+    pub a: PseudonymArgs<F>,
+    pub b: PseudonymArgs<F>,
+}
+
+#[derive(Clone)]
+pub struct PseudonymArgsPairVar<F: PrimeField> {
+    pub a: PseudonymArgsVar<F>,
+    pub b: PseudonymArgsVar<F>,
+}
 
 impl<F: PrimeField> AllocVar<PseudonymArgs<F>, F> for PseudonymArgsVar<F> {
     fn new_variable<T: Borrow<PseudonymArgs<F>>>(
@@ -77,7 +106,6 @@ impl<F: PrimeField> AllocVar<PseudonymArgs<F>, F> for PseudonymArgsVar<F> {
     ) -> Result<Self, SynthesisError> {
         let ns = cs.into();
         let cs = ns.cs(); // ConstraintSystemRef<F>
-
         let PseudonymArgs { context, claimed } = *f()?.borrow();
         Ok(Self {
             context: FpVar::new_variable(cs.clone(), || Ok(context), mode)?,
@@ -85,9 +113,6 @@ impl<F: PrimeField> AllocVar<PseudonymArgs<F>, F> for PseudonymArgsVar<F> {
         })
     }
 }
-
-// use ark_relations::r1cs::ToConstraintField;
-use ark_ff::ToConstraintField;
 
 impl<F: PrimeField> ToConstraintField<F> for PseudonymArgs<F> {
     fn to_field_elements(&self) -> Option<Vec<F>> {
@@ -105,20 +130,6 @@ pub fn pseudonym_pred<'a, 'b>(
     let claimed = pub_args.claimed;
     let derived = Poseidon::<2>::hash_in_zk(&[tu.data.sk.clone(), context.clone()])?;
     derived.is_eq(&claimed)
-}
-
-#[derive(Clone, Debug, Default, CanonicalDeserialize, CanonicalSerialize)]
-pub struct PseudonymArgsRate<F: PrimeField> {
-    pub context: F,
-    pub claimed: F,
-    pub i: F,
-}
-
-#[derive(Clone)]
-pub struct PseudonymArgsRateVar<F: PrimeField> {
-    pub context: FpVar<F>,
-    pub claimed: FpVar<F>,
-    pub i: FpVar<F>,
 }
 
 impl<F: PrimeField> AllocVar<PseudonymArgsRate<F>, F> for PseudonymArgsRateVar<F> {
@@ -147,18 +158,6 @@ impl<F: PrimeField> ToConstraintField<F> for PseudonymArgsRate<F> {
     fn to_field_elements(&self) -> Option<Vec<F>> {
         Some(vec![self.context, self.claimed, self.i])
     }
-}
-
-#[derive(Clone, Debug, Default, CanonicalDeserialize, CanonicalSerialize)]
-pub struct BadgesArgs<F: PrimeField> {
-    pub i: F,
-    pub claimed: F,
-}
-
-#[derive(Clone)]
-pub struct BadgesArgsVar<F: PrimeField> {
-    pub i: FpVar<F>,
-    pub claimed: FpVar<F>,
 }
 
 impl<F: PrimeField> AllocVar<BadgesArgs<F>, F> for BadgesArgsVar<F> {
@@ -195,18 +194,6 @@ pub fn badge_pred<'a, 'b>(
     let x1 = badge.is_eq(&claimed)?;
 
     Ok(x1)
-}
-
-#[derive(Clone, Default)]
-pub struct PseudonymArgsPair<F: PrimeField> {
-    pub a: PseudonymArgs<F>,
-    pub b: PseudonymArgs<F>,
-}
-
-#[derive(Clone)]
-pub struct PseudonymArgsPairVar<F: PrimeField> {
-    pub a: PseudonymArgsVar<F>,
-    pub b: PseudonymArgsVar<F>,
 }
 
 impl<F: PrimeField> AllocVar<PseudonymArgsPair<F>, F> for PseudonymArgsPairVar<F> {

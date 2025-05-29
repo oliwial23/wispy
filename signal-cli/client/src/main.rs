@@ -1,32 +1,27 @@
 pub mod parse;
 
-use crate::parse::Cli;
-use crate::parse::Command;
-use ark_ff::BigInteger256;
-use ark_ff::PrimeField;
+use crate::parse::{Cli, Command};
+
+use std::{
+    fs::File,
+    io::Write,
+    str::FromStr,
+    time::SystemTime,
+    usize,
+};
+use ark_ff::{BigInteger256, PrimeField};
 use ark_std::result::Result::Ok;
 use clap::Parser;
-use chrono::Utc;
-use client::helpers::compute_pseudo_for_poll;
-use client::helpers::save_start_time;
-use client::helpers::gen_pseudo;
-use client::helpers::get_claimed_context_by_index;
-use client::helpers::list_all_pseudos_from_log;
-use client::helpers::lookup_context;
-use client::helpers::make_authorship_proof;
-use client::helpers::make_badge_proof;
-use client::helpers::pseudo_proof_vote;
-use client::helpers::pseudo_proof_with_msg;
-use client::helpers::rate_pseudo_proof_with_msg;
-use client::helpers::string_to_f;
-use client::helpers::{ban, gen_cb_for_msg, join2, prf2, scan};
+use client::helpers::{
+    append_timing_line_features, ban, compute_pseudo_for_poll, gen_cb_for_msg, gen_pseudo, get_claimed_context_by_index,
+    join2, list_all_pseudos_from_log, lookup_context, make_authorship_proof, make_badge_proof, prf2,
+    pseudo_proof_vote, pseudo_proof_with_msg, rate_pseudo_proof_with_msg, rep, save_start_time, scan, string_to_f,
+};
 use common::F;
 use reqwest::Client;
-use serde::Deserialize;
-use serde::Serialize;
-use std::str::FromStr;
-use std::usize;
+use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
+
 
 #[derive(Serialize)]
 pub struct JsonRpcInput {
@@ -39,17 +34,14 @@ pub struct JsonRpcInput {
 pub struct JsonRpcInputPseudo {
     message: String,
     group_id: String,
-    // pseudo_idx: usize,
     proof: Vec<u8>,
 }
 
-// If Reactions are only allowed for anon msg's then we dont need target author
 #[derive(Serialize)]
 pub struct JsonRpcReact {
     group_id: String,
     emoji: String,
     timestamp: u64,
-    // poll: bool,
 }
 
 #[derive(Serialize)]
@@ -65,7 +57,6 @@ pub struct JsonRpcReplyPseudo {
     group_id: String,
     message: String,
     timestamp: u64,
-    // pseudo_idx: usize,
     proof: Vec<u8>,
 }
 
@@ -106,6 +97,8 @@ pub struct JsonAuthorship {
 #[derive(Serialize)]
 pub struct JsonBadge {
     proof: Vec<u8>,
+    group_id: String,
+
 }
 
 #[derive(Deserialize)]
@@ -124,38 +117,27 @@ pub struct ContextJson {
     context: String,
 }
 
-use client::helpers::rep;
-
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
     let client = Client::new();
-    println!("Hi Emma");
     match cli.command {
         Command::ViewPosts => {
             println!("Fetching posts...");
-            // Call view logic here
         }
         
-        // signal-cli-client -a +491724953171 --json-rpc-http "http://127.0.0.1:3000/api/jsonrpc" send -g VON5o2iTrMfkbvxB/ynpTJjU8TvAQd0Dq6oGG6PzCXc= -m 'Hello Rachel2'
         Command::Post { message, group_id } => {      
-            println!("Posting to group {}: {}", group_id, message);
 
-            // let start_time = Instant::now();
             match spawn_blocking(|| gen_cb_for_msg()).await {
                 Ok(Ok(proof_bytes)) => {
-                    // Optional: base64 encode if needed
-                    // let proof = base64::encode(&proof_bytes);
 
                     let payload = JsonRpcInput {
                         message,
                         group_id,
-                        proof: proof_bytes, // add this to your input struct
+                        proof: proof_bytes, 
                     };
-                    
-                    let start_time = Utc::now(); // Start (3)
-
-                    if let Err(e) = save_start_time("3", start_time) {
+        
+                    if let Err(e) = save_start_time("3") {
                         eprintln!("Failed to save start time: {}", e);
                     }
 
@@ -182,7 +164,6 @@ async fn main() {
             group_id,
             pseudo_idx,
         } => {
-            println!("Posting to group {}: {}", group_id, message);
 
             let (claimed_str, context_str) = get_claimed_context_by_index(pseudo_idx)
                 .or_else(|| get_claimed_context_by_index(1))
@@ -191,15 +172,17 @@ async fn main() {
             let context_f = F::from_bigint(BigInteger256::from_str(&context_str).unwrap()).unwrap();
             let claimed_f = F::from_bigint(BigInteger256::from_str(&claimed_str).unwrap()).unwrap();
 
-            // Call pseudo_proof2 in a blocking task
             match spawn_blocking(move || pseudo_proof_with_msg(claimed_f, context_f)).await {
                 Ok(Ok(proof)) => {
                     let payload = JsonRpcInputPseudo {
                         message,
                         group_id,
-                        // pseudo_idx,
                         proof,
                     };
+
+                    if let Err(e) = save_start_time("pseudo_msg") {
+                        eprintln!("Failed to save start time: {}", e);
+                    }
 
                     let res = client
                         .post("http://127.0.0.1:3000/api/jsonrpc/pseudo")
@@ -225,14 +208,6 @@ async fn main() {
             thread,
             pseudo_idx,
         } => {
-            println!("Posting to group {}: {}", group_id, message);
-
-            // let (claimed_str, _context_str) = get_claimed_context_by_index(pseudo_idx)
-            //     .or_else(|| get_claimed_context_by_index(1))
-            //     .expect("Both provided index and fallback index 1 failed");
-
-            // let context_f = F::from_bigint(BigInteger256::from_str(&context_str).unwrap()).unwrap();
-            // let claimed_f = F::from_bigint(BigInteger256::from_str(&claimed_str).unwrap()).unwrap();
 
             let context_f = lookup_context(&thread)
                 .expect("Could not find matching context for thread in local file");
@@ -247,9 +222,12 @@ async fn main() {
                     let payload = JsonRpcInputPseudo {
                         message,
                         group_id,
-                        // pseudo_idx,
                         proof,
                     };
+
+                    if let Err(e) = save_start_time("rate_pseudo") {
+                        eprintln!("Failed to save start time: {}", e);
+                    }
 
                     let res = client
                         .post("http://127.0.0.1:3000/api/jsonrpc/pseudo/rate")
@@ -312,9 +290,6 @@ async fn main() {
             std::fs::create_dir_all("client").expect("Failed to create client dir");
 
             // Write the full context.jsonl content to the client's file
-            use std::fs::File;
-            use std::io::Write;
-
             let mut file = File::create("client/contexts.jsonl").expect("Failed to create file");
             file.write_all(body.as_bytes())
                 .expect("Failed to write file");
@@ -327,21 +302,7 @@ async fn main() {
 
             match spawn_blocking(|| scan()).await {
                 Ok(Ok(proof_bytes)) => {
-                    // Optional: base64 encode if needed
-                    // let proof = base64::encode(&proof_bytes);
-
-                    // let payload = JsonRpcInput {
-                    //     message,
-                    //     group_id,
-                    //     proof: proof_bytes, // add this to your input struct
-                    // };
-
-                    // let res = client
-                    //     .post("http://127.0.0.1:3000/api/interact/scan")
-                    //     .json(&proof_bytes)
-                    //     .send()
-                    //     .await
-                    //     .unwrap();
+             
                     let res = client
                         .post("http://127.0.0.1:3000/api/interact/scan")
                         .body(proof_bytes) // sends raw binary, as expected
@@ -363,9 +324,16 @@ async fn main() {
         Command::Ban { t } => {
             println!("Banning...");
 
+            let start = SystemTime::now();
+
             match spawn_blocking(move || ban(t)).await {
                 Ok(Ok(())) => {
-                    // success
+                    // Success
+                    let end = SystemTime::now();
+
+                    if let Err(e) = append_timing_line_features("ban", start, end) {
+                        eprintln!("Failed to write timing file for proof gen: {}", e);
+                    }
                 }
                 Ok(Err(e)) => {
                     eprintln!("[gen_cb_for_msg] Error: {:?}", e);
@@ -381,9 +349,16 @@ async fn main() {
         Command::Rep { t } => {
             println!("Recording rep...");
 
+            let start = SystemTime::now();
+
             match spawn_blocking(move || rep(t)).await {
                 Ok(Ok(())) => {
-                    // success
+                    // Success
+                    let end = SystemTime::now();
+
+                    if let Err(e) = append_timing_line_features("rep", start, end) {
+                        eprintln!("Failed to write timing file for proof gen: {}", e);
+                    }
                 }
                 Ok(Err(e)) => {
                     eprintln!("[gen_cb_for_msg] Error: {:?}", e);
@@ -417,7 +392,6 @@ async fn main() {
         Command::Pseudonym {} => {
             let res = client
                 .get("http://127.0.0.1:3000/api/pseudonym")
-                // .json()
                 .send()
                 .await
                 .unwrap();
@@ -425,12 +399,6 @@ async fn main() {
             println!("Server responded: {}", res.text().await.unwrap());
         }
 
-        // Command::ThumbsUp { t } => {
-        //     update_reaction_log(t, 1).unwrap();
-        // }
-        // Command::ThumbsDown { t } => {
-        //     update_reaction_log(t, -1).unwrap();
-        // }
         Command::Reaction {
             group_id,
             emoji,
@@ -459,8 +427,6 @@ async fn main() {
         } => {
             match spawn_blocking(|| gen_cb_for_msg()).await {
                 Ok(Ok(proof_bytes)) => {
-                    // Optional: base64 encode if needed
-                    // let proof = base64::encode(&proof_bytes);
 
                     let payload = JsonRpcReply {
                         group_id,
@@ -494,7 +460,6 @@ async fn main() {
             pseudo_idx,
         } => {
             // Load the pseudonym context and claimed fields from log
-
             let (claimed_str, context_str) = get_claimed_context_by_index(pseudo_idx)
                 .or_else(|| get_claimed_context_by_index(1))
                 .expect("Both provided index and fallback index 1 failed");
@@ -502,14 +467,12 @@ async fn main() {
             let context_f = F::from_bigint(BigInteger256::from_str(&context_str).unwrap()).unwrap();
             let claimed_f = F::from_bigint(BigInteger256::from_str(&claimed_str).unwrap()).unwrap();
 
-            // Call pseudo_proof2 in a blocking task
             match spawn_blocking(move || pseudo_proof_with_msg(claimed_f, context_f)).await {
                 Ok(Ok(proof)) => {
                     let payload = JsonRpcReplyPseudo {
                         group_id,
                         message,
                         timestamp,
-                        // pseudo_idx,
                         proof,
                     };
 
@@ -554,9 +517,6 @@ async fn main() {
             let context_f = F::from_bigint(BigInteger256::from_str(&context_str).unwrap()).unwrap();
             let claimed_f = compute_pseudo_for_poll(&context_f);
 
-            // let context_f = F::from_bigint(BigInteger256::from_str(&context).unwrap()).unwrap();
-            // let claimed_f = compute_pseudo_for_poll(&context_f);
-
             match spawn_blocking(move || pseudo_proof_vote(claimed_f, context_f)).await {
                 Ok(Ok(proof)) => {
                     let payload = JsonRpcVote {
@@ -567,12 +527,16 @@ async fn main() {
                         proof,
                     };
 
+                    if let Err(e) = save_start_time("pseudo_vote") {
+                        eprintln!("Failed to save start time: {}", e);
+                    }
+
                     let res = client
                         .post("http://127.0.0.1:3000/api/vote")
                         .json(&payload)
                         .send()
                         .await
-                        .unwrap(); // /main.rs:486:26:
+                        .unwrap();
 
                     println!("Server responded: {}", res.text().await.unwrap());
                 }
@@ -608,8 +572,6 @@ async fn main() {
                     eprintln!("Request failed: {}", e);
                 }
             }
-
-            //println!("Server responded: {}", res.text().await.unwrap());
         }
 
         Command::BanPoll {
@@ -657,6 +619,10 @@ async fn main() {
                 Ok(Ok(proof)) => {
                     let payload = JsonAuthorship { proof, group_id };
 
+                    if let Err(e) = save_start_time("author") {
+                        eprintln!("Failed to save start time: {}", e);
+                    }
+
                     let res = client
                         .post("http://127.0.0.1:3000/api/authorship")
                         .json(&payload)
@@ -675,13 +641,17 @@ async fn main() {
             }
         }
 
-        Command::Badge { i, claimed } => {
+        Command::Badge { i, claimed, group_id } => {
             let claimed_f = string_to_f(&claimed);
             let payload_result = spawn_blocking(move || make_badge_proof(i, claimed_f)).await;
 
             match payload_result {
                 Ok(Ok(proof)) => {
-                    let payload = JsonBadge { proof };
+                    let payload = JsonBadge {proof, group_id};
+
+                    if let Err(e) = save_start_time("badge") {
+                        eprintln!("Failed to save start time: {}", e);
+                    }
 
                     let res = client
                         .post("http://127.0.0.1:3000/api/badges")
@@ -703,23 +673,3 @@ async fn main() {
     }
 }
 
-// fn find_context_for_pseudonym(pseudonym: &str) -> String {
-//     let file = File::open("client/pseudo_log.jsonl").expect("Failed to open pseudo_log.jsonl");
-//     let reader = BufReader::new(file);
-
-//     for line in reader.lines() {
-//         let line = line.expect("Failed to read line");
-//         let json: Value = serde_json::from_str(&line).expect("Invalid JSON");
-
-//         let claimed = json["claimed"].as_str().expect("Missing 'claimed' field");
-
-//         if claimed == pseudonym {
-//             return json["context"]
-//                 .as_str()
-//                 .expect("Missing 'context' field")
-//                 .to_string();
-//         }
-//     }
-
-//     panic!("No matching pseudonym found in pseudo_log.jsonl");
-// }

@@ -8,13 +8,23 @@ import nbformat
 from nbconvert.preprocessors import ExecutePreprocessor
 import shutil
 
-OUTPUT_FILE = "timing_log.json"
+OUTPUT_FILE = "experiments/timing_log.json"
 NUM_ITERATIONS = 100
 GROUP_ID = "VON5o2iTrMfkbvxB/ynpTJjU8TvAQd0Dq6oGG6PzCXc="
+THREAD = "experiment"
 
 # Clear all existing experiment files
 def clean_previous_results():
-    folders = ['json_files/1', 'json_files/2', 'json_files/3']
+    folders = ['json_files/1', 
+               'json_files/2', 
+               'json_files/3',  
+               'json_files/author', 
+               'json_files/rate_pseudo', 
+               'json_files/pseudo_msg', 
+               'json_files/pseudo_vote', 
+               'json_files/badge', 
+               'json_files/ban', 
+               'json_files/rep']
     for folder in folders:
         if os.path.exists(folder):
             for file in os.listdir(folder):
@@ -38,11 +48,61 @@ def clean_previous_results():
 # Run cleanup first
 clean_previous_results()
 
-for subdir in ['json_files/1', 'json_files/2', 'json_files/3']:
+for subdir in ['json_files/1', 
+               'json_files/2', 
+               'json_files/3',  
+               'json_files/author', 
+               'json_files/rate_pseudo', 
+               'json_files/pseudo_msg', 
+               'json_files/pseudo_vote', 
+               'json_files/badge',
+               'json_files/ban', 
+               'json_files/rep']:
     os.makedirs(subdir, exist_ok=True)
+
+os.makedirs("experiments", exist_ok=True)
 
 with open("json_files/3/start_time.json", "w") as f:
     f.write('{}')
+
+with open("json_files/author/start_time.json", "w") as f:
+    f.write('{}')
+
+with open("json_files/rate_pseudo/start_time.json", "w") as f:
+    f.write('{}')
+
+with open("json_files/pseudo_msg/start_time.json", "w") as f:
+    f.write('{}')
+
+with open("json_files/pseudo_vote/start_time.json", "w") as f:
+    f.write('{}')
+
+with open("json_files/badge/start_time.json", "w") as f:
+    f.write('{}')
+
+
+def wait(seconds):
+    print(f"Waiting {seconds} seconds...\n")
+    time.sleep(seconds)
+
+
+def get_latest_zkpair_timestamp():
+    with open("server/zkpair_log.jsonl", "r") as f:
+        lines = f.readlines()
+        if not lines:
+            return None
+        last_entry = json.loads(lines[-1])
+        return last_entry.get("timestamp")
+
+
+def get_latest_poll_timestamp():
+    with open("server/poll_log.jsonl", "r") as f:
+        lines = f.readlines()
+        if not lines:
+            return None
+        last_entry = json.loads(lines[-1])
+        return last_entry.get("timestamp")
+
 
 def run_command(command):
     start = time.time()
@@ -66,15 +126,33 @@ def append_log(entry):
 def get_timing_log(path):
     return os.path.exists(os.path.join(path, "timings.jsonl"))
 
+def get_timing_features_log(path):
+    return os.path.exists(os.path.join(path, "features_timings.jsonl"))
+
 def assert_all_timings_written():
-    if not all([
-        get_timing_log("json_files/1"),
-        get_timing_log("json_files/2"),
-        get_timing_log("json_files/3")
-    ]):
+    paths = ['json_files/1', 
+             'json_files/2', 
+             'json_files/3',  
+             'json_files/author', 
+             'json_files/rate_pseudo', 
+             'json_files/pseudo_msg', 
+             'json_files/pseudo_vote', 
+             'json_files/badge']
+    if not all([get_timing_log(path) for path in paths]):
         raise RuntimeError("❌ Missing one or more timing files!")
     print("✅ All timing files written correctly.")
 
+def assert_all_timings_features_written():
+    paths = ['json_files/author', 
+             'json_files/rate_pseudo', 
+             'json_files/pseudo_msg', 
+             'json_files/pseudo_vote', 
+             'json_files/badge',
+             'json_files/ban', 
+             'json_files/rep']
+    if not all([get_timing_features_log(path) for path in paths]):
+        raise RuntimeError("❌ Missing one or more timing files!")
+    print("✅ All timing files written correctly.")
 
 def run_notebook(path):
     print("📊 Running analysis notebook...")
@@ -89,37 +167,161 @@ join_command = ["cargo", "run", "--bin", "client", "join"]
 print("🧪 Running join command...")
 run_command(join_command)
 
-# 2. Run post 100 times
-for i in range(1, NUM_ITERATIONS + 1):
-    message = f"Message: {i}"
-    post_command = [
-        "cargo", "run", "--bin", "client", "post",
-        "-m", message,
-        "-g", GROUP_ID
-    ]
+# Generate another pseudonym for authorship check
+print("Generating new pseudonym...")
+run_command(["cargo", "run", "--bin", "client", "gen-pseudo"])
 
-    print(f"📨 Iteration {i}: Sending post...")
-    post_duration, post_success, post_error = run_command(post_command)
+# Generate a new thread context
+new_context_command = [
+    "cargo", "run",  "--bin",  "client", "new-thread-cxt", 
+    "-m",  THREAD
+]
+print("Running new context command...")
+run_command(new_context_command)
+
+# Get the existing contexts
+get_context_command = [
+    "cargo", "run",  "--bin",  "client", "get-contexts" 
+]
+print("Running get context command...")
+run_command(get_context_command)
+
+
+# 2. Run normal post 100 times with rep
+for j in range(1, NUM_ITERATIONS + 1):
+    iteration_log = {
+        "iteration": j,
+        "timestamp": datetime.utcnow().isoformat(),
+        "actions": {}
+    }
+
+    print(f"📨 Iteration {j}: Sending standard post...")
+    duration, success, error = run_command([
+        "cargo", "run", "--bin", "client", "post",
+        "-m", f"Message: {j}",
+        "-g", GROUP_ID
+    ])
+    iteration_log["actions"]["standard_post"] = {"duration": duration, "success": success, "error": error if not success else None}
+
+    # Grab the message timestamp to increase rep
+    ts_rep = get_latest_zkpair_timestamp()
+
+    print(f"📨 Iteration {j}: Increasing reputation...")
+    duration, success, error  = run_command([
+        "cargo", "run", "--bin", "client", "reaction",
+        "-g", GROUP_ID,
+        "-e", "👍",
+        "-t", str(ts_rep)
+    ])
+    iteration_log["actions"]["reaction"] = {"duration": duration, "success": success, "error": error if not success else None}
+    
+    print(f"📨 Iteration {j}: Counting reputation...")
+    duration, success, error = run_command([
+        "cargo", "run", "--bin", "client", "rep",
+        "-t", str(ts_rep)
+    ])
+    iteration_log["actions"]["rep"] = {"duration": duration, "success": success, "error": error if not success else None}
+
+    print(f"📨 Iteration {j}: Scanning 1...")
+    duration, success, error = run_command([
+        "cargo", "run", "--bin", "client", "scan"
+    ])
+    iteration_log["actions"]["scan"] = {"duration": duration, "success": success, "error": error if not success else None}
+
+    append_log(iteration_log)
+    print(f"✅ Iteration {j} complete.")
+    wait(8) # waiting added for trend graph
+
+
+# 3. Run all other experiments 100 times
+for i in range(1, NUM_ITERATIONS + 1):
+
+    print(f"📨 Iteration {i}: Sending pseudonym post...")
+    duration, success, error = run_command([
+        "cargo", "run", "--bin", "client", "post-pseudo",
+        "-m", f"Pseudonym Message: {i}",
+        "-g", GROUP_ID,
+        "-i", "1"
+    ])
+    iteration_log["actions"]["pseudonym_post"] = {"duration": duration, "success": success, "error": error if not success else None}
+
+    # Grab the timestamp of message to ban user
+    ts_ban = get_latest_zkpair_timestamp()
+
+    print(f"📨 Iteration {i}: Ban...")
+    duration, success, error = run_command([
+        "cargo", "run", "--bin", "client", "ban",
+        "-t", str(ts_ban)
+    ])
+    iteration_log["actions"]["ban"] = {"duration": duration, "success": success, "error": error if not success else None}
+
+    print(f"📨 Iteration {i}: Sending rate-limited pseudonym post...")
+    duration, success, error = run_command([
+        "cargo", "run", "--bin", "client", "post-pseudo-rate",
+        "-m", f"Rate Pseudo Message: {i}",
+        "-g", GROUP_ID,
+        "-t", THREAD,
+        "-i", "0"
+    ])
+    iteration_log["actions"]["rate_pseudo_post"] = {"duration": duration, "success": success, "error": error if not success else None}
+
+    print(f"📨 Iteration {i}: Proving badge...")
+    duration, success, error = run_command([
+        "cargo", "run", "--bin", "client", "badge",
+        "-i", "1",
+        "-b", "0",
+        "-g", GROUP_ID
+    ])
+    iteration_log["actions"]["badge"] = {"duration": duration, "success": success, "error": error if not success else None}
+
+    print(f"📨 Iteration {i}: Sending poll...")
+    duration, success, error = run_command([
+        "cargo", "run", "--bin", "client", "poll",
+        "-m", f"Poll Message: {i}",
+        "-g", GROUP_ID
+    ])
+    iteration_log["actions"]["poll"] = {"duration": duration, "success": success, "error": error if not success else None}
+
+    # Grab the poll timestamp to vote on
+    ts = get_latest_poll_timestamp()
+
+    if ts:
+        print(f"📨 Iteration {i}: Voting on poll {ts}...")
+        duration, success, error = run_command([
+            "cargo", "run", "--bin", "client", "vote",
+            "-g", GROUP_ID,
+            "-t", str(ts),
+            "-e", "👍"
+        ])
+        iteration_log["actions"]["vote"] = {"duration": duration, "success": success, "error": error if not success else None}
+    else:
+        iteration_log["actions"]["vote"] = {"duration": None, "success": False, "error": "No poll timestamp found"}
+
+    print(f"📨 Iteration {i}: Checking authorship...")
+    duration, success, error = run_command([
+        "cargo", "run", "--bin", "client", "authorship",
+        "-i", str(1),
+        "-j", str(2),
+        "-g", GROUP_ID
+    ])
+    iteration_log["actions"]["authorship"] = {"duration": duration, "success": success, "error": error if not success else None}
 
     try:
         assert_all_timings_written()
     except RuntimeError as e:
-        print(f"⚠️ Iteration {i} error: {e}")
+        print(f"⚠️ Iteration {i} warning: {e}")
+        iteration_log["timing_check_error"] = str(e)
 
-    log_entry = {
-        "iteration": i,
-        "timestamp": datetime.utcnow().isoformat(),
-        "post": {
-            "message": message,
-            "duration_seconds": post_duration,
-            "success": post_success,
-            "error": post_error if not post_success else None
-        }
-    }
+    try:
+        assert_all_timings_features_written()
+    except RuntimeError as e:
+        print(f"⚠️ Iteration {i} warning: {e}")
+        iteration_log["timing_check_error"] = str(e)
 
-    append_log(log_entry)
+    append_log(iteration_log)
     print(f"✅ Iteration {i} complete.")
 
-# 3. Analyze results
+
+# 4. Analyze results
 run_notebook("experiment_analysis.ipynb")
 

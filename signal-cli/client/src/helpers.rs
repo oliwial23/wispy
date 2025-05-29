@@ -1,32 +1,33 @@
-use crate::bul::BulNet;
-use chrono::{DateTime, Utc};
-use std::path::PathBuf;
+use std::{
+    fs::{File, OpenOptions},
+    io::{BufRead, BufReader, BufWriter, Write},
+    path::{Path, PathBuf},
+    str::FromStr,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use anyhow::Result;
 use ark_bn254::Fr;
 use ark_ff::{BigInteger, BigInteger256, PrimeField, ToConstraintField};
-use ark_groth16::Groth16;
+use ark_groth16::{Groth16, ProvingKey};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use ark_std::{fs, result::Result::Ok, UniformRand};
 use common::{
-    zk::{
-        exec_pseudo_standint, exec_scanint, exec_standint, pseudonym_pred, MsgUser, PseudonymArgs,
-        PseudonymArgsVar,
-    },
     E, F,
+    zk::{
+        authorship_pred, badge_pred, exec_pseudo_rate_standint, exec_pseudo_standint, exec_scanint, exec_standint,
+        BadgesArgs, BadgesArgsVar, MsgUser, PseudonymArgs, PseudonymArgsPair, PseudonymArgsPairVar,
+        PseudonymArgsRate, PseudonymArgsVar, pseudonym_pred,
+    },
 };
+use identicon_rs::Identicon;
 use petname::{Generator, Petnames};
 use rand::{
     rngs::{OsRng, StdRng},
     SeedableRng,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::{
-    fs::File,
-    io::{BufRead, BufReader, BufWriter, Write},
-    str::FromStr,
-};
+use serde_json::{json, Value};
 use url::Url;
 use zk_callbacks::{
     crypto::hash::HasherZK,
@@ -41,9 +42,9 @@ use zk_callbacks::{
         hash::Poseidon,
     },
 };
-use std::path::Path;
-use serde_json::json;
-use std::time::Instant;
+
+use crate::bul::BulNet;
+
 
 #[derive(Serialize, Deserialize)]
 pub struct PseudonymProofEntry {
@@ -129,56 +130,85 @@ pub fn join2() -> Result<()> {
     Ok(())
 }
 
+/// Generates a filename based on UNIX timestamp in milliseconds.
 pub fn generate_timestamped_path(prefix: &str) -> PathBuf {
-    let ts = chrono::Utc::now().format("%Y%m%dT%H%M%S");
+    let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
     let dir = Path::new(prefix);
-    fs::create_dir_all(dir).unwrap(); // ensure the directory exists
+    fs::create_dir_all(dir).unwrap();
     dir.join(format!("timing_{}.json", ts))
 }
 
+/// Writes a timing entry to a single JSON file.
+pub fn write_timing(id: &str, start: SystemTime, end: SystemTime, path: &str) -> Result<(), std::io::Error> {
+    let start_ms = start.duration_since(UNIX_EPOCH).unwrap().as_millis();
+    let duration_ms = end.duration_since(start).unwrap().as_millis();
 
-pub fn write_timing(id: &str, start: DateTime<Utc>, end: DateTime<Utc>, path: &str) -> Result<(), std::io::Error> {
-    let duration_ms = (end - start).num_milliseconds();
     let json = json!({
         "id": id,
-        "start": start.to_rfc3339(),
-        "end": end.to_rfc3339(),
+        "start_ms": start_ms,
         "duration_ms": duration_ms,
     });
 
     std::fs::write(path, json.to_string())
 }
 
-pub fn save_start_time(label: &str, t: DateTime<Utc>) -> std::io::Result<()> {
+/// Saves just the start time in UNIX milliseconds for a given label.
+pub fn save_start_time(label: &str) -> std::io::Result<()> {
     let path = format!("json_files/{}/start_time.json", label);
-    std::fs::write(path, json!({ "start": t.to_rfc3339() }).to_string())
+    let start = SystemTime::now();
+    let start_ms = start.duration_since(UNIX_EPOCH).unwrap().as_millis();
+    // std::fs::create_dir_all(format!("json_files/{}", label))?;
+    std::fs::write(path, json!({ "start_ms": start_ms }).to_string())
 }
 
-pub fn load_start_time(label: &str) -> Result<DateTime<Utc>, std::io::Error> {
+/// Loads start time from a previously saved UNIX milliseconds file.
+pub fn load_start_time(label: &str) -> Result<SystemTime, std::io::Error> {
     let path = format!("json_files/{}/start_time.json", label);
     let contents = std::fs::read_to_string(path)?;
     let val: serde_json::Value = serde_json::from_str(&contents)?;
-    Ok(DateTime::parse_from_rfc3339(val["start"].as_str().unwrap()).unwrap().with_timezone(&Utc))
+    let start_ms = val["start_ms"].as_u64().expect("start_ms must be a u64");
+    Ok(UNIX_EPOCH + Duration::from_millis(start_ms))
 }
 
+/// Appends a timing line to a `.jsonl` file in the appropriate folder.
+pub fn append_timing_line(label: &str, start: SystemTime, end: SystemTime) -> Result<(), std::io::Error> {
+    let start_ms = start.duration_since(UNIX_EPOCH).unwrap().as_millis();
+    let duration_ms = end.duration_since(start).unwrap().as_millis();
 
-pub fn append_timing_line(label: &str, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<(), std::io::Error> {
-    let duration_ms = (end - start).num_milliseconds();
     let line = json!({
-        "start": start.to_rfc3339(),
-        "end": end.to_rfc3339(),
+        "start_ms": start_ms,
         "duration_ms": duration_ms,
     }).to_string();
 
     let dir = format!("json_files/{}", label);
-    std::fs::create_dir_all(&dir)?;
-    let mut file = std::fs::OpenOptions::new()
+    fs::create_dir_all(&dir)?;
+    let mut file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(format!("{}/timings.jsonl", dir))?;
     writeln!(file, "{}", line)?;
     Ok(())
 }
+
+pub fn append_timing_line_features(label: &str, start: SystemTime, end: SystemTime) -> Result<(), std::io::Error> {
+    let start_ms = start.duration_since(UNIX_EPOCH).unwrap().as_millis();
+    let duration_ms = end.duration_since(start).unwrap().as_millis();
+
+    let line = json!({
+        "start_ms": start_ms,
+        "duration_ms": duration_ms,
+    }).to_string();
+
+    let dir = format!("json_files/{}", label);
+    fs::create_dir_all(&dir)?;
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(format!("{}/features_timings.jsonl", dir))?;
+    writeln!(file, "{}", line)?;
+    Ok(())
+}
+
 
 pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
     
@@ -196,7 +226,7 @@ pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
     pub_inputs.extend::<Vec<F>>(().to_field_elements().unwrap());
 
     // Start (1)
-    let start_time = Utc::now();  // Start (1)
+    let start = SystemTime::now();
 
     let exec = exec_standint(
         &mut user,
@@ -210,9 +240,9 @@ pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
     .unwrap();
 
     // End(1)
-    let end_time = Utc::now();  // End (1)
+    let end = SystemTime::now();
 
-    if let Err(e) = append_timing_line("1", start_time, end_time) {
+    if let Err(e) = append_timing_line("1", start, end) {
         eprintln!("Failed to write timing file for proof gen: {}", e);
     }
     
@@ -347,6 +377,8 @@ pub fn pseudo_proof_with_msg(claimed: F, context: F) -> Result<Vec<u8>, Synthesi
     let pseudo = PseudonymArgs { context, claimed };
     println!("[USER] Generating pseudonym proof with {:?}", pseudo);
 
+    let start = SystemTime::now();
+
     // Execute standard interaction
     let exec = exec_pseudo_standint(
         &mut user,
@@ -359,6 +391,12 @@ pub fn pseudo_proof_with_msg(claimed: F, context: F) -> Result<Vec<u8>, Synthesi
         (),
     )
     .unwrap();
+
+    let end = SystemTime::now();
+
+    if let Err(e) = append_timing_line("pseudo_msg", start, end) {
+        eprintln!("Failed to write timing file for proof gen: {}", e);
+    }
 
     println!("[USER] Executed interaction");
 
@@ -374,9 +412,6 @@ pub fn pseudo_proof_with_msg(claimed: F, context: F) -> Result<Vec<u8>, Synthesi
     println!("{:?}", user);
     Ok(payload)
 }
-
-use common::zk::exec_pseudo_rate_standint;
-use common::zk::PseudonymArgsRate;
 
 pub fn rate_pseudo_proof_with_msg(claimed: F, context: F, i: F) -> Result<Vec<u8>, SynthesisError> {
     println!("[USER] Interacting (proving)...");
@@ -394,6 +429,8 @@ pub fn rate_pseudo_proof_with_msg(claimed: F, context: F, i: F) -> Result<Vec<u8
     };
     println!("[USER] Generating pseudonym proof with {:?}", pseudo);
 
+    let start = SystemTime::now();
+
     // Execute standard interaction
     let exec = exec_pseudo_rate_standint(
         &mut user,
@@ -406,15 +443,18 @@ pub fn rate_pseudo_proof_with_msg(claimed: F, context: F, i: F) -> Result<Vec<u8
     )
     .unwrap();
 
+    let end = SystemTime::now();
+
+    if let Err(e) = append_timing_line("rate_pseudo", start, end) {
+        eprintln!("Failed to write timing file for proof gen: {}", e);
+    }
+
     println!("[USER] Executed interaction");
 
     // Serialize all three components: exec, proof, pub_inputs
     let mut payload = vec![];
     exec.serialize_with_mode(&mut payload, Compress::No)
         .unwrap();
-    // proof
-    //     .serialize_with_mode(&mut payload, Compress::No)
-    //     .unwrap();
     vec![context, claimed, i]
         .serialize_with_mode(&mut payload, Compress::No)
         .unwrap();
@@ -439,6 +479,8 @@ pub fn pseudo_proof_vote(claimed: F, context: F) -> Result<Vec<u8>, SynthesisErr
     let pseudo = PseudonymArgs { context, claimed };
     println!("[USER] Generating pseudonym proof with {:?}", pseudo);
 
+    let start = SystemTime::now();
+
     let proof = user.prove_statement_and_in::<
         Poseidon<2>,
         PseudonymArgs<F>,
@@ -456,6 +498,12 @@ pub fn pseudo_proof_vote(claimed: F, context: F) -> Result<Vec<u8>, SynthesisErr
         pseudo.clone(),
         (),
     )?;
+
+    let end = SystemTime::now();
+
+    if let Err(e) = append_timing_line("pseudo_vote", start, end) {
+        eprintln!("Failed to write timing file for proof gen: {}", e);
+    }
 
     // Serialize all three components: exec, proof, pub_inputs
     let mut payload = vec![];
@@ -534,10 +582,6 @@ pub fn make_authorship_proof(i1: usize, i2: usize) -> Result<Vec<u8>, SynthesisE
     let (pubkey, sig) = bul.get_membership_data(commit).unwrap();
     let pk_arb_pred = get_arbitrary_pred_pk2();
 
-    use common::zk::authorship_pred;
-    use common::zk::PseudonymArgsPair;
-    use common::zk::PseudonymArgsPairVar;
-
     let (claimed_str1, context_str1) =
         get_claimed_context_by_index(i1).expect("Invalid index or malformed line");
     let (claimed_str2, context_str2) =
@@ -564,6 +608,10 @@ pub fn make_authorship_proof(i1: usize, i2: usize) -> Result<Vec<u8>, SynthesisE
         b: pseudo2.clone(),
     };
 
+    // Strart author
+
+    let start = SystemTime::now();
+
     let proof = user
     .prove_statement_and_in::<
         Poseidon<2>,
@@ -583,6 +631,12 @@ pub fn make_authorship_proof(i1: usize, i2: usize) -> Result<Vec<u8>, SynthesisE
         (),                 // public inputs go here
     )
     .unwrap();
+
+    let end = SystemTime::now();
+
+    if let Err(e) = append_timing_line("author", start, end) {
+        eprintln!("Failed to write timing file for proof gen: {}", e);
+    }
 
     let mut payload = vec![];
     proof
@@ -611,10 +665,6 @@ pub fn make_badge_proof(i: usize, badge: F) -> Result<Vec<u8>, SynthesisError> {
     let (pubkey, sig) = bul.get_membership_data(commit).unwrap();
     let pk_arb_pred = get_arbitrary_pred_pk3();
 
-    use common::zk::badge_pred;
-    use common::zk::BadgesArgs;
-    use common::zk::BadgesArgsVar;
-
     let i_f = F::from(i as u32);
     // let badge = F::from(1);
 
@@ -622,6 +672,8 @@ pub fn make_badge_proof(i: usize, badge: F) -> Result<Vec<u8>, SynthesisError> {
         i: i_f,
         claimed: badge.clone(),
     };
+
+    let start= SystemTime::now();
 
     let proof = user
     .prove_statement_and_in::<
@@ -643,6 +695,12 @@ pub fn make_badge_proof(i: usize, badge: F) -> Result<Vec<u8>, SynthesisError> {
     )
     .unwrap();
 
+    let end = SystemTime::now();
+
+    if let Err(e) = append_timing_line("badge", start, end) {
+        eprintln!("Failed to write timing file for proof gen: {}", e);
+    }
+
     let mut payload = vec![];
     proof
         .serialize_with_mode(&mut payload, Compress::No)
@@ -656,7 +714,45 @@ pub fn make_badge_proof(i: usize, badge: F) -> Result<Vec<u8>, SynthesisError> {
     Ok(payload)
 }
 
-use ark_groth16::ProvingKey;
+// Generate badges using identicon if badges should be sent as an attachment
+pub fn generate_badges(b1: F, b2: F, b3: F) {
+    let i = "1";
+    let j = "2";
+    let k = "3";
+
+    let mut badge1 = String::new();
+    badge1.push_str(i);
+    badge1.push_str(&b1.to_string());
+
+    let mut badge2 = String::new();
+    badge2.push_str(j);
+    badge2.push_str(&b2.to_string());
+
+    let mut badge3 = String::new();
+    badge3.push_str(k);
+    badge3.push_str(&b3.to_string());
+
+    let path1 = format!("client/badge{}.png", i);
+    let path2 = format!("client/badge{}.png", j);
+    let path3 = format!("client/badge{}.png", k);
+
+    let avatar_path_1 = std::env::current_dir().unwrap().join(path1);
+    let avatar_path_2 = std::env::current_dir().unwrap().join(path2);
+    let avatar_path_3 = std::env::current_dir().unwrap().join(path3);
+
+    let ap1_str = avatar_path_1.to_str().unwrap();
+    let ap2_str = avatar_path_2.to_str().unwrap();
+    let ap3_str = avatar_path_3.to_str().unwrap();
+
+    let _b1 = Identicon::new(&badge1).save_image(&ap1_str);
+    let _b2 = Identicon::new(&badge2).save_image(&ap2_str);
+    let _b3 = Identicon::new(&badge3).save_image(&ap3_str);
+
+    assert!(avatar_path_1.exists(), "badge1.png was not created");
+    assert!(avatar_path_2.exists(), "badge1.png was not created");
+    assert!(avatar_path_3.exists(), "badge1.png was not created");
+
+}
 
 pub fn get_standard_proving_key() -> ProvingKey<E> {
     let bul = BulNet::new(Url::parse("http://127.0.0.1:3000").unwrap());
