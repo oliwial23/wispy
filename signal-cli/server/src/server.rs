@@ -18,7 +18,7 @@ use axum::{
     http::StatusCode,
     response::{ErrorResponse, IntoResponse, Response},
 };
-use client::helpers::{append_timing_line, append_timing_line_features, load_start_time};
+use client::helpers::{append_timing_line, append_timing_line_call_cb, append_timing_line_epoch, append_timing_line_features, append_timing_line_verify, load_start_time};
 use common::{
     zk::{arg_ban, arg_rep, get_callbacks, get_extra_pubdata_for_scan2, MsgUser},
     Args, Cr, Snark, E, F,
@@ -389,6 +389,8 @@ pub async fn forward_jsonrpc_pseudo(
         claimed: pub_inputs[1],
     };
 
+    let start_verify = SystemTime::now();
+
     // Store the interaction to the object bulletin board
     let verify_store = <GRSchnorrObjStore as UserBul<F, MsgUser>>::verify_interact_and_append::<
         PseudonymArgs<F>,
@@ -408,26 +410,7 @@ pub async fn forward_jsonrpc_pseudo(
 
     info!("[SERVER] Verification result: {:?}", verify_store);
 
-    // Write callback commitments to log file
-    for (cb_com, _) in &exec.cb_tik_list {
-        let mut file = std::fs::OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open("server/zkpair_log.jsonl")
-            .unwrap();
-
-        let mut bytes = vec![];
-        cb_com
-            .serialize_with_mode(&mut bytes, Compress::No)
-            .unwrap();
-
-        writeln!(
-            file,
-            "{{\"callback_com\": \"{}\", \"type\": \"cb\"}}",
-            hex::encode(bytes)
-        )
-        .unwrap();
-    }
+    let cb_tickets = &exec.cb_tik_list.clone(); // get callback tickets
 
     // Store callback-reputation merged record
     let cb_methods = get_callbacks();
@@ -445,11 +428,34 @@ pub async fn forward_jsonrpc_pseudo(
             332, // interaction number
         );
 
+    let end_verify = SystemTime::now();
+
     info!("[SERVER] Verification result: {:?}", res);
     if res.is_ok() {
         info!("[SERVER] Verified and added to bulletin!");
     } else {
         info!("[SERVER] Verification failed. Not added to bulletin.");
+    }
+
+    // Write callback commitments to log file
+    for (cb_com, _) in cb_tickets {
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open("server/zkpair_log.jsonl")
+            .unwrap();
+
+        let mut bytes = vec![];
+        cb_com
+            .serialize_with_mode(&mut bytes, Compress::No)
+            .unwrap();
+
+        writeln!(
+            file,
+            "{{\"callback_com\": \"{}\", \"type\": \"cb\"}}",
+            hex::encode(bytes)
+        )
+        .unwrap();
     }
 
     let claimed_bytes = claimed.into_bigint().to_bytes_le();
@@ -496,6 +502,10 @@ pub async fn forward_jsonrpc_pseudo(
 
     if let Err(e) = append_timing_line_features("pseudo_msg", start_time, end_time) {
         eprintln!("Failed to write timing file for latency psuedo message: {}", e);
+    }
+
+    if let Err(e) = append_timing_line_verify("pseudo_msg", start_verify, end_verify) {
+        eprintln!("❌ Failed to write timing file for peudo msg verify: {}", e);
     }
     
     match output {
@@ -613,6 +623,8 @@ pub async fn forward_jsonrpc_pseudo_rate(
         i,
     };
 
+    let start_verify=SystemTime::now();
+
     // Store the interaction to the object bulletin board
     let verify_store = <GRSchnorrObjStore as UserBul<F, MsgUser>>::verify_interact_and_append::<
         PseudonymArgsRate<F>,
@@ -634,8 +646,35 @@ pub async fn forward_jsonrpc_pseudo_rate(
 
     info!("[SERVER] Verification result: {:?}", verify_store);
 
+    let cb_tickets = &exec.cb_tik_list.clone();
+    
+    // Store callback-reputation merged record
+    let cb_methods = get_callbacks();
+    let res = db
+        .approve_interaction_and_store::<MsgUser, Groth16<E>, PseudonymArgsRate<F>, GRSchnorrObjStore, Poseidon<2>, 1>(
+            exec,                 
+            FakeSigPrivkey::sk(), 
+            pub_args,
+            &db.obj_bul.clone(),
+            cb_methods.clone(),
+            Time::from(0),
+            db.obj_bul.get_pubkey(),
+            true,
+            &vk,
+            332, // interaction number
+        );
+
+    let end_verify = SystemTime::now();
+
+    info!("[SERVER] Verification result: {:?}", res);
+    if res.is_ok() {
+        info!("[SERVER] Verified and added to bulletin!");
+    } else {
+        info!("[SERVER] Verification failed. Not added to bulletin.");
+    }
+
     // Write callback commitments to log file
-    for (cb_com, _) in &exec.cb_tik_list {
+    for (cb_com, _) in cb_tickets {
         let mut file = std::fs::OpenOptions::new()
             .append(true)
             .create(true)
@@ -653,29 +692,6 @@ pub async fn forward_jsonrpc_pseudo_rate(
             hex::encode(bytes)
         )
         .unwrap();
-    }
-
-    // Store callback-reputation merged record
-    let cb_methods = get_callbacks();
-    let res = db
-        .approve_interaction_and_store::<MsgUser, Groth16<E>, PseudonymArgsRate<F>, GRSchnorrObjStore, Poseidon<2>, 1>(
-            exec,                 
-            FakeSigPrivkey::sk(), 
-            pub_args,
-            &db.obj_bul.clone(),
-            cb_methods.clone(),
-            Time::from(0),
-            db.obj_bul.get_pubkey(),
-            true,
-            &vk,
-            332, // interaction number
-        );
-
-    info!("[SERVER] Verification result: {:?}", res);
-    if res.is_ok() {
-        info!("[SERVER] Verified and added to bulletin!");
-    } else {
-        info!("[SERVER] Verification failed. Not added to bulletin.");
     }
 
     let claimed_bytes = claimed.into_bigint().to_bytes_le();
@@ -723,6 +739,10 @@ pub async fn forward_jsonrpc_pseudo_rate(
 
     if let Err(e) = append_timing_line_features("rate_pseudo", start_time, end_time) {
         eprintln!("Failed to write timing file for latency rate pseudo: {}", e);
+    }
+
+    if let Err(e) = append_timing_line_verify("rate_pseudo", start_verify, end_verify) {
+        eprintln!("❌ Failed to write timing file for rate pseudo verify: {}", e);
     }
 
     match output {
@@ -1409,7 +1429,11 @@ pub async fn forward_vote(
     let pub_inputs: Vec<F> =
         Vec::<F>::deserialize_with_mode(&mut reader, Compress::No, Validate::Yes).unwrap();
 
+    let start_verify = SystemTime::now();
+
     let verified = Groth16::<E>::verify(&vki, &pub_inputs, &proof).unwrap();
+
+    let end_verify= SystemTime::now();
 
     info!("Server result: {}", verified);
 
@@ -1454,6 +1478,10 @@ pub async fn forward_vote(
 
     if let Err(e) = append_timing_line_features("pseudo_vote", start_time, end_time) {
         eprintln!("Failed to write timing file for latency psuedo vote: {}", e);
+    }
+
+    if let Err(e) = append_timing_line_verify("pseudo_vote", start_verify, end_verify) {
+        eprintln!(" Failed to write timing file for pseudo vote verify: {}", e);
     }
 
     let emoji_name = emoji_to_name(emoji);
@@ -1671,7 +1699,13 @@ pub async fn forward_authorship(
     let pub_inputs: Vec<F> =
         Vec::<F>::deserialize_with_mode(&mut reader, Compress::No, Validate::Yes).unwrap();
 
+
+    let start_verify = SystemTime::now();
+
     let verified = Groth16::<E>::verify(&vki, &pub_inputs, &proof).unwrap();
+
+    let end_verify = SystemTime::now();
+
     info!("[SERVER] Verification result: {}", verified);
 
     let claimed1 = pub_inputs[0];
@@ -1731,6 +1765,10 @@ pub async fn forward_authorship(
         eprintln!("Failed to write timing file for latency author: {}", e);
     }
 
+    if let Err(e) = append_timing_line_verify("author", start_verify, end_verify) {
+        eprintln!(" Failed to write timing file for author verify: {}", e);
+    }
+
     match output {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1765,7 +1803,12 @@ pub async fn forward_badges(
     let pub_inputs: Vec<F> =
         Vec::<F>::deserialize_with_mode(&mut reader, Compress::No, Validate::Yes).unwrap();
 
+    let start_verify = SystemTime::now();
+
     let verified = Groth16::<E>::verify(&vki, &pub_inputs, &proof).unwrap();
+
+    let end_verify = SystemTime::now();
+
     info!("[SERVER] Verification result: {}", verified);
 
     let badge_str = pub_inputs[1].to_string();
@@ -1802,6 +1845,10 @@ pub async fn forward_badges(
     
     if let Err(e) = append_timing_line_features("badge", start_time, end_time) {
         eprintln!("Failed to write timing file for latency badge: {}", e);
+    }
+
+    if let Err(e) = append_timing_line_verify("badge", start_verify, end_verify) {
+        eprintln!(" Failed to write timing file for badge verify: {}", e);
     }
 
     match output {
@@ -2309,6 +2356,10 @@ pub async fn handle_send_rep_request(
     let arg = arg_rep(rep);
     let called = db.call(cb, arg, FakeSigPrivkey::sk()).unwrap();
 
+
+    // Start time verify for rep
+    let start_call  = SystemTime::now();
+
     <GRSchnorrCallbackStore<Fr> as CallbackBul<Fr, Fr, Cr>>::verify_call_and_append(
         &mut db.callback_bul,
         called.0,
@@ -2317,9 +2368,25 @@ pub async fn handle_send_rep_request(
         Time::from(0),
     )
     .unwrap();
+    // end time verify for rep
+    let end_call = SystemTime::now();
+
+    // start update epoch time
+    let start_epoch  = SystemTime::now();
 
     db.callback_bul.update_epoch(&mut rng);
     info!("[SERVER] User reputation now updated!");
+
+    // end update epoch time 
+    let end_epoch = SystemTime::now();
+
+    if let Err(e) = append_timing_line_call_cb("rep", start_call, end_call) {
+        eprintln!("Failed to write timing file for proof gen: {}", e);
+    }
+
+    if let Err(e) = append_timing_line_epoch("rep", start_epoch, end_epoch) {
+        eprintln!("Failed to write timing file for proof gen: {}", e);
+    }
 }
 
 #[tracing::instrument(skip_all)]

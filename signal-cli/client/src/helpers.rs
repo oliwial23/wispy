@@ -209,6 +209,64 @@ pub fn append_timing_line_features(label: &str, start: SystemTime, end: SystemTi
     Ok(())
 }
 
+pub fn append_timing_line_call_cb(label: &str, start: SystemTime, end: SystemTime) -> Result<(), std::io::Error> {
+    let start_ms = start.duration_since(UNIX_EPOCH).unwrap().as_millis();
+    let duration_ms = end.duration_since(start).unwrap().as_millis();
+
+    let line = json!({
+        "start_ms": start_ms,
+        "duration_ms": duration_ms,
+    }).to_string();
+
+    let dir = format!("json_files/{}", label);
+    fs::create_dir_all(&dir)?;
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(format!("{}/call_timings.jsonl", dir))?;
+    writeln!(file, "{}", line)?;
+    Ok(())
+}
+
+pub fn append_timing_line_epoch(label: &str, start: SystemTime, end: SystemTime) -> Result<(), std::io::Error> {
+    let start_ms = start.duration_since(UNIX_EPOCH).unwrap().as_millis();
+    let duration_ms = end.duration_since(start).unwrap().as_millis();
+
+    let line = json!({
+        "start_ms": start_ms,
+        "duration_ms": duration_ms,
+    }).to_string();
+
+    let dir = format!("json_files/{}", label);
+    fs::create_dir_all(&dir)?;
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(format!("{}/epoch_timings.jsonl", dir))?;
+    writeln!(file, "{}", line)?;
+    Ok(())
+}
+
+
+pub fn append_timing_line_verify(label: &str, start: SystemTime, end: SystemTime) -> Result<(), std::io::Error> {
+    let start_ms = start.duration_since(UNIX_EPOCH).unwrap().as_millis();
+    let duration_ms = end.duration_since(start).unwrap().as_millis();
+
+    let line = json!({
+        "start_ms": start_ms,
+        "duration_ms": duration_ms,
+    }).to_string();
+
+    let dir = format!("json_files/{}", label);
+    fs::create_dir_all(&dir)?;
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(format!("{}/verify_timings.jsonl", dir))?;
+    writeln!(file, "{}", line)?;
+    Ok(())
+}
+
 
 pub fn gen_cb_for_msg() -> Result<Vec<u8>, SynthesisError> {
     
